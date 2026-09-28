@@ -1,0 +1,1036 @@
+{
+  "grid_size": [
+    4,
+    5
+  ],
+  "tile_m": 0.6,
+  "start": [
+    0,
+    0
+  ],
+  "end": [
+    0,
+    0
+  ],
+  "path": [
+    [
+      0,
+      0
+    ],
+    [
+      1,
+      0
+    ],
+    [
+      2,
+      0
+    ],
+    [
+      2,
+      1
+    ],
+    [
+      1,
+      1
+    ],
+    [
+      1,
+      2
+    ],
+    [
+      1,
+      1
+    ],
+    [
+      2,
+      1
+    ],
+    [
+      2,
+      0
+    ],
+    [
+      3,
+      0
+    ],
+    [
+      3,
+      1
+    ],
+    [
+      3,
+      2
+    ],
+    [
+      3,
+      3
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      1,
+      3
+    ],
+    [
+      1,
+      4
+    ],
+    [
+      0,
+      4
+    ],
+    [
+      0,
+      3
+    ],
+    [
+      0,
+      2
+    ],
+    [
+      0,
+      1
+    ],
+    [
+      0,
+      2
+    ],
+    [
+      0,
+      3
+    ],
+    [
+      0,
+      4
+    ],
+    [
+      1,
+      4
+    ],
+    [
+      1,
+      3
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      3,
+      3
+    ],
+    [
+      3,
+      2
+    ],
+    [
+      3,
+      1
+    ],
+    [
+      3,
+      0
+    ],
+    [
+      2,
+      0
+    ],
+    [
+      1,
+      0
+    ],
+    [
+      0,
+      0
+    ]
+  ],
+  "visited": [
+    [
+      0,
+      0
+    ],
+    [
+      0,
+      1
+    ],
+    [
+      0,
+      2
+    ],
+    [
+      0,
+      3
+    ],
+    [
+      0,
+      4
+    ],
+    [
+      1,
+      0
+    ],
+    [
+      1,
+      1
+    ],
+    [
+      1,
+      2
+    ],
+    [
+      1,
+      3
+    ],
+    [
+      1,
+      4
+    ],
+    [
+      2,
+      0
+    ],
+    [
+      2,
+      1
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      3,
+      0
+    ],
+    [
+      3,
+      1
+    ],
+    [
+      3,
+      2
+    ],
+    [
+      3,
+      3
+    ]
+  ],
+  "walls": [
+    [
+      [
+        0,
+        0
+      ],
+      3
+    ],
+    [
+      [
+        0,
+        1
+      ],
+      3
+    ],
+    [
+      [
+        0,
+        1
+      ],
+      [
+        1,
+        1
+      ]
+    ],
+    [
+      [
+        0,
+        2
+      ],
+      3
+    ],
+    [
+      [
+        0,
+        2
+      ],
+      [
+        1,
+        2
+      ]
+    ],
+    [
+      [
+        0,
+        3
+      ],
+      3
+    ],
+    [
+      [
+        0,
+        4
+      ],
+      0
+    ],
+    [
+      [
+        0,
+        4
+      ],
+      3
+    ],
+    [
+      [
+        1,
+        0
+      ],
+      2
+    ],
+    [
+      [
+        1,
+        0
+      ],
+      [
+        1,
+        1
+      ]
+    ],
+    [
+      [
+        1,
+        2
+      ],
+      [
+        1,
+        3
+      ]
+    ],
+    [
+      [
+        1,
+        2
+      ],
+      [
+        2,
+        2
+      ]
+    ],
+    [
+      [
+        1,
+        4
+      ],
+      0
+    ],
+    [
+      [
+        1,
+        4
+      ],
+      [
+        2,
+        4
+      ]
+    ],
+    [
+      [
+        2,
+        0
+      ],
+      2
+    ],
+    [
+      [
+        2,
+        1
+      ],
+      [
+        2,
+        2
+      ]
+    ],
+    [
+      [
+        2,
+        1
+      ],
+      [
+        3,
+        1
+      ]
+    ],
+    [
+      [
+        2,
+        2
+      ],
+      [
+        3,
+        2
+      ]
+    ],
+    [
+      [
+        3,
+        0
+      ],
+      1
+    ],
+    [
+      [
+        3,
+        0
+      ],
+      2
+    ],
+    [
+      [
+        3,
+        1
+      ],
+      1
+    ],
+    [
+      [
+        3,
+        2
+      ],
+      1
+    ],
+    [
+      [
+        3,
+        3
+      ],
+      1
+    ]
+  ],
+  "open_edges": [
+    [
+      [
+        0,
+        0
+      ],
+      [
+        0,
+        1
+      ]
+    ],
+    [
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        0
+      ]
+    ],
+    [
+      [
+        0,
+        1
+      ],
+      [
+        0,
+        2
+      ]
+    ],
+    [
+      [
+        0,
+        2
+      ],
+      [
+        0,
+        3
+      ]
+    ],
+    [
+      [
+        0,
+        3
+      ],
+      [
+        0,
+        4
+      ]
+    ],
+    [
+      [
+        0,
+        3
+      ],
+      [
+        1,
+        3
+      ]
+    ],
+    [
+      [
+        0,
+        4
+      ],
+      [
+        1,
+        4
+      ]
+    ],
+    [
+      [
+        1,
+        0
+      ],
+      [
+        2,
+        0
+      ]
+    ],
+    [
+      [
+        1,
+        1
+      ],
+      [
+        1,
+        2
+      ]
+    ],
+    [
+      [
+        1,
+        1
+      ],
+      [
+        2,
+        1
+      ]
+    ],
+    [
+      [
+        1,
+        3
+      ],
+      [
+        1,
+        4
+      ]
+    ],
+    [
+      [
+        1,
+        3
+      ],
+      [
+        2,
+        3
+      ]
+    ],
+    [
+      [
+        2,
+        0
+      ],
+      [
+        2,
+        1
+      ]
+    ],
+    [
+      [
+        2,
+        0
+      ],
+      [
+        3,
+        0
+      ]
+    ],
+    [
+      [
+        2,
+        2
+      ],
+      [
+        2,
+        3
+      ]
+    ],
+    [
+      [
+        2,
+        3
+      ],
+      [
+        2,
+        4
+      ]
+    ],
+    [
+      [
+        2,
+        3
+      ],
+      [
+        3,
+        3
+      ]
+    ],
+    [
+      [
+        3,
+        0
+      ],
+      [
+        3,
+        1
+      ]
+    ],
+    [
+      [
+        3,
+        1
+      ],
+      [
+        3,
+        2
+      ]
+    ],
+    [
+      [
+        3,
+        2
+      ],
+      [
+        3,
+        3
+      ]
+    ],
+    [
+      [
+        3,
+        3
+      ],
+      [
+        3,
+        4
+      ]
+    ]
+  ],
+  "targets": [
+    {
+      "id": "blue rect_tall",
+      "kind": "blue rect_tall",
+      "color": "blue",
+      "shape": "rect_tall",
+      "x_m": 1.545,
+      "y_m": 0.822,
+      "cell": [
+        2,
+        1
+      ],
+      "observations": 4,
+      "shot": true,
+      "seen_from": [
+        1,
+        1
+      ],
+      "best_dist_m": 0.62,
+      "views": [
+        {
+          "cell": [
+            1,
+            0
+          ],
+          "dist_m": 0.7
+        },
+        {
+          "cell": [
+            1,
+            1
+          ],
+          "dist_m": 0.62
+        }
+      ],
+      "confirmed": true
+    },
+    {
+      "id": "green square",
+      "kind": "green square",
+      "color": "green",
+      "shape": "square",
+      "x_m": 1.087,
+      "y_m": 1.123,
+      "cell": [
+        1,
+        1
+      ],
+      "observations": 3,
+      "shot": true,
+      "seen_from": [
+        1,
+        1
+      ],
+      "best_dist_m": 0.27,
+      "views": [
+        {
+          "cell": [
+            1,
+            1
+          ],
+          "dist_m": 0.27
+        }
+      ],
+      "confirmed": true
+    },
+    {
+      "id": "blue square",
+      "kind": "blue square",
+      "color": "blue",
+      "shape": "square",
+      "x_m": 1.283,
+      "y_m": 0.793,
+      "cell": [
+        2,
+        1
+      ],
+      "observations": 3,
+      "shot": false,
+      "seen_from": [
+        1,
+        1
+      ],
+      "best_dist_m": 0.41,
+      "views": [
+        {
+          "cell": [
+            1,
+            1
+          ],
+          "dist_m": 0.41
+        }
+      ],
+      "confirmed": true
+    },
+    {
+      "id": "green rect_tall",
+      "kind": "green rect_tall",
+      "color": "green",
+      "shape": "rect_tall",
+      "x_m": 1.11,
+      "y_m": 1.274,
+      "cell": [
+        1,
+        2
+      ],
+      "observations": 1,
+      "shot": true,
+      "seen_from": [
+        1,
+        1
+      ],
+      "best_dist_m": 0.43,
+      "views": [
+        {
+          "cell": [
+            1,
+            1
+          ],
+          "dist_m": 0.43
+        }
+      ],
+      "confirmed": true
+    },
+    {
+      "id": "yellow rect_tall",
+      "kind": "yellow rect_tall",
+      "color": "yellow",
+      "shape": "rect_tall",
+      "x_m": 1.421,
+      "y_m": 2.67,
+      "cell": [
+        2,
+        4
+      ],
+      "observations": 2,
+      "shot": true,
+      "seen_from": [
+        3,
+        3
+      ],
+      "best_dist_m": 0.89,
+      "views": [
+        {
+          "cell": [
+            3,
+            2
+          ],
+          "dist_m": 1.32
+        },
+        {
+          "cell": [
+            3,
+            3
+          ],
+          "dist_m": 0.89
+        }
+      ],
+      "confirmed": true
+    },
+    {
+      "id": "red circle",
+      "kind": "red circle",
+      "color": "red",
+      "shape": "circle",
+      "x_m": 2.194,
+      "y_m": 2.779,
+      "cell": [
+        3,
+        4
+      ],
+      "observations": 4,
+      "shot": true,
+      "seen_from": [
+        3,
+        3
+      ],
+      "best_dist_m": 0.57,
+      "views": [
+        {
+          "cell": [
+            3,
+            2
+          ],
+          "dist_m": 1.52
+        },
+        {
+          "cell": [
+            3,
+            3
+          ],
+          "dist_m": 0.57
+        }
+      ],
+      "confirmed": true
+    },
+    {
+      "id": "yellow rect_tall #2",
+      "kind": "yellow rect_tall",
+      "color": "yellow",
+      "shape": "rect_tall",
+      "x_m": 1.559,
+      "y_m": 1.696,
+      "cell": [
+        2,
+        2
+      ],
+      "observations": 3,
+      "shot": true,
+      "seen_from": [
+        3,
+        3
+      ],
+      "best_dist_m": 0.62,
+      "views": [
+        {
+          "cell": [
+            3,
+            3
+          ],
+          "dist_m": 0.62
+        }
+      ],
+      "confirmed": true
+    },
+    {
+      "id": "green rect_tall #2",
+      "kind": "green rect_tall",
+      "color": "green",
+      "shape": "rect_tall",
+      "x_m": 0.87,
+      "y_m": 2.505,
+      "cell": [
+        1,
+        4
+      ],
+      "observations": 5,
+      "shot": true,
+      "seen_from": [
+        0,
+        4
+      ],
+      "best_dist_m": 0.56,
+      "views": [
+        {
+          "cell": [
+            0,
+            4
+          ],
+          "dist_m": 0.56
+        },
+        {
+          "cell": [
+            0,
+            3
+          ],
+          "dist_m": 0.64
+        }
+      ],
+      "confirmed": true
+    },
+    {
+      "id": "green square #2",
+      "kind": "green square",
+      "color": "green",
+      "shape": "square",
+      "x_m": 0.516,
+      "y_m": 2.432,
+      "cell": [
+        0,
+        4
+      ],
+      "observations": 3,
+      "shot": false,
+      "seen_from": [
+        0,
+        4
+      ],
+      "best_dist_m": 0.41,
+      "views": [
+        {
+          "cell": [
+            0,
+            4
+          ],
+          "dist_m": 0.41
+        }
+      ],
+      "confirmed": true
+    }
+  ],
+  "shots": [
+    {
+      "id": "blue rect_tall",
+      "kind": "blue rect_tall",
+      "robot_cell": [
+        1,
+        0
+      ],
+      "t": 1790616421.268808,
+      "t_s": 18.9
+    },
+    {
+      "id": "green square",
+      "kind": "green square",
+      "robot_cell": [
+        1,
+        1
+      ],
+      "t": 1790616470.493289,
+      "t_s": 68.2
+    },
+    {
+      "id": "green rect_tall",
+      "kind": "green rect_tall",
+      "robot_cell": [
+        1,
+        1
+      ],
+      "t": 1790616515.456782,
+      "t_s": 113.1
+    },
+    {
+      "id": "red circle",
+      "kind": "red circle",
+      "robot_cell": [
+        3,
+        3
+      ],
+      "t": 1790616583.006381,
+      "t_s": 180.7
+    },
+    {
+      "id": "yellow rect_tall #2",
+      "kind": "yellow rect_tall",
+      "robot_cell": [
+        3,
+        3
+      ],
+      "t": 1790616589.985827,
+      "t_s": 187.7
+    },
+    {
+      "id": "yellow rect_tall",
+      "kind": "yellow rect_tall",
+      "robot_cell": [
+        3,
+        3
+      ],
+      "t": 1790616599.665791,
+      "t_s": 197.3
+    },
+    {
+      "id": "green rect_tall #2",
+      "kind": "green rect_tall",
+      "robot_cell": [
+        0,
+        4
+      ],
+      "t": 1790616679.682868,
+      "t_s": 277.4
+    }
+  ],
+  "round": 1,
+  "elapsed_s": 416.2,
+  "time_limit_s": 600,
+  "designated_targets": [
+    "blue circle",
+    "blue rect_tall",
+    "blue rect_wide",
+    "blue square",
+    "green circle",
+    "green rect_tall",
+    "green rect_wide",
+    "green square",
+    "red circle",
+    "red rect_tall",
+    "red rect_wide",
+    "red square",
+    "yellow circle",
+    "yellow rect_tall",
+    "yellow rect_wide",
+    "yellow square"
+  ],
+  "route_plan": null,
+  "splits": [
+    {
+      "id": "blue rect_tall",
+      "t_s": 18.9
+    },
+    {
+      "id": "green square",
+      "t_s": 68.2
+    },
+    {
+      "id": "green rect_tall",
+      "t_s": 113.1
+    },
+    {
+      "id": "red circle",
+      "t_s": 180.7
+    },
+    {
+      "id": "yellow rect_tall #2",
+      "t_s": 187.7
+    },
+    {
+      "id": "yellow rect_tall",
+      "t_s": 197.3
+    },
+    {
+      "id": "green rect_tall #2",
+      "t_s": 277.4
+    }
+  ]
+}
