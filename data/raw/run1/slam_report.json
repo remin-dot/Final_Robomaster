@@ -1,5 +1,5 @@
 {
-  "log_file": "c:\\Users\\lenovo\\Documents\\GitHub\\RoboFinal\\data/raw/run1\\log_20260923_exploration_map_data.csv",
+  "log_file": "c:\\Users\\lenovo\\Documents\\GitHub\\RoboFinal\\data/raw/run1\\log_20260928_exploration_map_data.csv",
   "start_grid": [
     0,
     0
@@ -9,11 +9,11 @@
     0.0
   ],
   "end_grid": [
-    0,
+    2,
     2
   ],
   "end_real_m": [
-    0.0,
+    1.2,
     1.2
   ],
   "visited_cells": 20,
