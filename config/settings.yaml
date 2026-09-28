@@ -26,6 +26,12 @@ movement:
   distance: 0.6      # Forward/backward travel distance (m)
   z_speed: 90        # Rotation speed (degrees/second)
   angle: 90          # Initial turning angle (e.g., 90 degrees)
+  wall_threshold_mm: 450   # ToF closer than this = wall on that side (centred: ~250 to a wall, ~850 past an open edge)
+  # order to try a cell's open ways, relative to how the robot came in: side cells
+  # first (left, back, right, back), then ahead. Put right first to start on the right.
+  explore_order: [left, right, front, back]
+  release_after_round: true  # after a round: gimbal motors off + no drive commands (carry it to the start)
+  heading_guard_deg: 12     # heading off by more than this while driving: stop and turn back first
 
 lidar_scan:
   start_yaw: -75
@@ -36,7 +42,7 @@ lidar_scan:
   max_valid_dist_mm: 10000
 
 grid_map:
-  max_x: 3
+  max_x: 3          # 4x5 tiles -> indices 0..3
   max_y: 4
   start:             # 🟢 เพิ่มค่าเริ่มต้นตรงนี้ (เช่น วางหุ่นที่ช่องไหนก็ใส่ x, y นั้น)
     x: 0
@@ -44,3 +50,82 @@ grid_map:
   # goal:
   #   x:
   #   y:
+
+sharp_ir:                   # 2 Sharp IR (GP2Y0A41, 4-30 cm) - from RoboFinal
+  # [adaptor id, port] tried in order, the first that answers is used
+  # (this robot: right = 2/1; RoboFinal's robot: right = 3/1)
+  right_ports: [[2, 1], [3, 1]]
+  left_ports: [[1, 2], [1, 1]]
+  side_safe_cm: 9.0         # centred in a tile the sides read ~13 cm: slide away below this
+  side_danger_cm: 6.0       # slow down below this
+  M: 12.0                   # Vo = M / (L + 0.42) + C
+  C: 0.0
+  min_cm: 4.0
+  max_cm: 30.0
+  wall_detect_cm: 16.9      # closer than this = wall beside the robot
+  poll_hz: 10
+
+vision:
+  resolution: "540p"        # camera stream; 7 cm cards at 1.2 m are too small at 360p
+  panel_fps: 30
+  hfov_deg: 96              # camera field of view - Actions > "Calibrate: card at 1 m" sets it
+  camera_latency_s: 0.2     # Wi-Fi video delay (RoboFinal measured 0.2 s)
+  bottom_ignore_ratio: 0.15 # blaster barrel is visible at the bottom of the frame
+  max_shoot_tiles: 2        # rule: shoot from <= 2 tiles
+  # the assignment sheet's own set (colour -> shape): the "Sheet set" preset
+  catalogue:
+    blue: circle
+    red: rect_wide
+    yellow: rect_tall
+    green: square
+  # real card size [width, height] (m) -> distance. Measured by RoboFinal on the lab cards:
+  # circle 7 cm across, square 7 x 7 cm, rectangle 9 x 6 cm
+  plate_size_m:             # per shape, any colour
+    circle: [0.07, 0.07]
+    square: [0.07, 0.07]
+    rect_wide: [0.09, 0.06]
+    rect_tall: [0.06, 0.09]
+  # which colours can be cards at all (the room walls are yellow: RoboFinal's round 1
+  # found 12 "yellow objects" - the checks below drop them; remove yellow here if not)
+  card_colors: [blue, red, yellow, green]
+  min_area_px: 80           # smallest blob at 640 px width (7 cm card at 1.2 m ~ 250 px)
+  min_solidity: 0.85        # ragged blobs are not cards
+  max_ring_fill: 0.25       # same colour all around the blob = wall / tape, not a card
+  behind_wall_margin_m: 0.15  # further than the ToF wall that way (+ this) = behind the wall
+  min_observations: 2       # scan stops that must see a target before it counts
+  # --- ignore the room around the arena (people, tables, chairs, yellow walls) ---
+  ignore_above_wall: true   # nothing above the top of the white foam walls (+ floor) is a card
+  wall_s_max: 60            # foam wall / floor pixels: saturation at most this ...
+  wall_v_min: 120           # ... and brightness at least this
+  wall_margin_frac: 0.03    # keep this much of the picture height above the wall line
+  wall_max_gap_frac: 0.25   # a non-white gap up to this (a card in front of a wall) stays inside the band
+  max_elevation_deg: 1.5    # cards hang lower than the camera (~0.25 m): nothing more than this above
+                            # the horizon is a card (uses the live gimbal pitch). null = off
+  # --- close look: something seen in / next to the robot's block -> camera down, turn all round
+  verify_sweep: true
+  verify_pitch_deg: -12     # how far the camera looks down for the close look
+  # --- camera wall check (a wrong turn must not drive into a wall)
+  wall_rise_m: 0.12         # foam wall height - camera height; re-learnt from the ToF at every front scan
+  camera_block_m: 0.40      # before a move: a wall this close in the path (and the ToF agrees) = do not move
+  camera_stop_m: 0.22       # while moving: stop when a wall in the path gets this close
+  camera_tof_block_mm: 450  # ... only if the ToF also reads closer than this (before a move)
+  camera_tof_stop_mm: 300   # ... or this (while moving; a normal cell ahead reads ~850 mm)
+                            # (the camera only stops / blocks a move when the ToF agrees)
+  # --- a card hangs at card height: floor tape and things in the room are not at it
+  camera_height_m: 0.25     # camera lens above the floor (RoboFinal measured 0.25)
+  card_min_height_m: 0.06   # lower than this = on the floor (tape); cards on 15-20 cm sticks sit ~0.12-0.17 m up
+  card_max_height_m: 0.30
+  # card kinds to shoot on the day ("colour shape"; shooting a wrong one = -1).
+  # colours: blue red yellow green   shapes: circle rect_wide rect_tall square
+  # e.g. ["blue circle", "red circle"]. Switch them on the panel: Select tab -> Save.
+  shoot_targets: ["blue circle", "blue rect_tall", "blue rect_wide", "blue square", "green circle", "green rect_tall", "green rect_wide", "green square", "red circle", "red rect_tall", "red rect_wide", "red square", "yellow circle", "yellow rect_tall", "yellow rect_wide", "yellow square"]
+  round_time_limit_s: {1: 600, 2: 300}
+
+shooting:
+  enabled: true
+  fire_type: "water"        # "water" (gel beads) or "ir"
+  shots_per_target: 1
+  aim_tolerance_deg: 1.5
+  aim_pitch_offset_deg: -3.5  # + raises the barrel (RoboFinal: shots went high, -3.5); panel: Aim trim
+  aim_yaw_offset_deg: 0.0
+  lock_frames: 2            # frames in a row on target before firing (RoboFinal)
