@@ -50,10 +50,20 @@ class TargetShooter:
         self.pitch_sign = float(cfg.get("gimbal_pitch_sign", 1))
         self.max_iters = int(cfg.get("aim_max_iterations", 6))
         self.lock_frames = int(cfg.get("lock_frames", 2))
+        self.fire_confirm_frames = max(self.lock_frames, int(cfg.get("fire_confirm_frames", 4)))
+        self.fire_max_detection_age_s = float(cfg.get("fire_max_detection_age_s", 0.45))
+        self.fire_require_full_visibility = bool(cfg.get("fire_require_full_visibility", True))
+        self.fire_require_gimbal_still = bool(cfg.get("fire_require_gimbal_still", True))
         self.lost_retries = int(cfg.get("lost_retries", 3))
         self.barrel_below_m = float(cfg.get("barrel_below_camera_m", 0.03))
         self.confirm_fall = bool(cfg.get("confirm_fall", True))      # fire again until the card falls
+        # Practice without gel beads: the card cannot physically fall.  Count a target only
+        # after the normal full-card, range, freshness, still-gimbal and centre-lock gates all
+        # pass and the SDK trigger command succeeds.  Turn this off for a loaded blaster so
+        # confirm_fall can verify the real hit and learn vertical trim.
+        self.assume_hit_after_locked_fire = bool(cfg.get("assume_hit_after_locked_fire", False))
         self.max_shots = int(cfg.get("max_shots_per_target", 3))
+        self.shot_counts = {}              # hard per-target cap across every revisit/aim attempt
         self.fall_wait_s = float(cfg.get("fall_wait_s", 0.6))
         self.tol_max_deg = float(cfg.get("aim_tolerance_max_deg", 3.5))
         self.armed = bool(cfg.get("enabled", True))  # False = dry run (RoboFinal "Blaster armed")
@@ -169,11 +179,17 @@ class TargetShooter:
         """After a shot: is the card still up where it was? Looks at a few fresh frames
         (after it had time to fall). Returns the detection if it still stands, None if
         it is gone (fallen) in most of them."""
-        time.sleep(self.fall_wait_s)
+        wait_end = time.time() + self.fall_wait_s
+        while time.time() < wait_end:
+            if not self.panel.checkpoint():
+                return None
+            time.sleep(min(0.05, wait_end - time.time()))
         color = kind.split(" ", 1)[0]
         seen = []
         after = time.time() + self.latency           # the first frame taken after the wait
         for _ in range(frames):
+            if not self.panel.checkpoint():
+                return None
             after, dets = self.panel.worker.wait_det(after, timeout=0.3 + self.latency)
             best = None
             fam = ("square", "rect_wide", "rect_tall")
@@ -340,6 +356,12 @@ class TargetShooter:
                     elif expect is not None:
                         gate = 12.0
                     d = self._pick(dets, kind, near, gate)
+                    if d is None and targets:
+                        # After the first large gimbal move, camera latency can put the card
+                        # outside the predicted gate for one frame even though it is now near
+                        # the boresight. Reacquire only a matching card close to centre; this
+                        # is bounded tightly enough not to jump to another target.
+                        d = self._pick(dets, kind, (0.0, 0.0), 12.0)
                     # fixed in the picture? compare two frames both taken with the gimbal still
                     # (under 4 deg/s for the 0.3 s before): the camera delay cannot fake that.
                     # Checked on the blob at the SAME picture spot (the aim above drops it as
@@ -544,6 +566,9 @@ class TargetShooter:
     def _find(self, kind):
         # frames arrive ~0.2 s late: one grabbed right after a move still shows the old view
         _, dets = self.panel.worker.wait_fresh(time.time() + self.latency, timeout=0.6 + self.latency)
+        # Worker detections are raw camera observations.  target_id is assigned later by
+        # MissionPanel when an observation is associated with the map, so requiring it here
+        # made every fresh aiming frame fail even when the correct card filled the view.
         cands = [d for d in dets if d.is_card and d.kind == kind]
         if not cands:
             # the map knows the true shape; at a slant the raw frame may call it the look-alike
@@ -555,6 +580,51 @@ class TargetShooter:
         # the one nearest the boresight (another card of the same kind may be in view)
         return min(cands, key=lambda d: abs(d.bearing_deg) + abs(d.elevation_deg)) if cands else None
 
+    def _fire_candidate_ok(self, det, tid, kind):
+        """Strict last-frame gate. Mapping may accept candidates; firing may not."""
+        if det is None or not getattr(det, "is_card", False) or getattr(det, "guess", None):
+            return False, "not a confirmed full card"
+        mapped = self.panel.map.targets.get(tid)
+        if not mapped or not mapped.get("confirmed") or mapped.get("shot"):
+            return False, "mapped target is missing, unconfirmed, or already shot"
+        if mapped.get("kind") != kind or kind not in self.panel.selected:
+            return False, "mapped target kind is not selected"
+        # A raw camera frame normally has no target_id.  The selected map id remains the
+        # authority; the fresh frame proves colour/shape and visibility immediately before
+        # firing.  Rectangle look-alikes are allowed until the existing ToF/shape gate below
+        # resolves them.
+        if det.kind != kind:
+            color, shape = kind.split(" ", 1) if " " in kind else (kind, "")
+            rects = ("square", "rect_wide", "rect_tall")
+            if det.color != color or shape not in rects or det.shape not in rects:
+                return False, "fresh detection does not match mapped target"
+        if self.fire_require_full_visibility:
+            extra = getattr(det, "extra", {}) or {}
+            x, y, w, h = det.bbox
+            W, H = self.panel.detector.last_frame_size or (0, 0)
+            clipped = bool(extra.get("clipped")) or x <= 2 or y <= 2 or (W and x + w >= W - 2) or (H and y + h >= H - 2)
+            if clipped:
+                return False, "partial or touching image edge"
+        ts = getattr(self.panel.worker, "det_ts", 0.0)
+        if ts and time.time() - ts > self.fire_max_detection_age_s:
+            return False, "stale detection"
+        if self.fire_require_gimbal_still:
+            hist = list(self.gimbal_hist()) if callable(self.gimbal_hist) else list(self.gimbal_hist or [])
+            if len(hist) >= 2:
+                a, b = hist[-2], hist[-1]
+                if abs(float(b[2]) - float(a[2])) > 1.5 or abs(float(b[1]) - float(a[1])) > 1.5:
+                    return False, "gimbal not still"
+        return True, "ok"
+
+    def _accept_practice_fire(self, tid, det):
+        """Record a validated trigger as HIT when intentionally running without beads."""
+        if not self.assume_hit_after_locked_fire:
+            return False
+        self.panel.map.mark_shot(tid)
+        self.panel.aim.set_phase("HIT")
+        self.panel.log(f"HIT {det.label}: centred locked fire accepted (no-ammo practice mode)")
+        return True
+
     # ------------------------------------------------------------------
     def engage(self, kind, target_id=None, expect=None):
         """Aim at the card of this kind ("blue circle") and fire. target_id = the card on the map
@@ -563,11 +633,19 @@ class TargetShooter:
         panel = self.panel
         tid = target_id or kind
         color = kind
+        already = self.shot_counts.get(tid, 0)
+        if already >= self.max_shots:
+            panel.log(f"{tid}: {already}/{self.max_shots} shots already fired - hard limit, not revisiting")
+            return False
         if kind not in panel.selected:       # never shoot a card that is not selected (-1)
             panel.log(f"{kind} is not selected - not shooting")
             return False
         if not self.armed and tid in self.dry_locked:
             return False
+        # When called in legacy single-target mode there may be no map id yet; keep
+        # the id filter relaxed for lookup, then bind to the observed id before the
+        # final firing gate.
+        self._active_target_id = target_id
         aim = panel.aim
         gimbal = self.ep_robot.gimbal
         det = None
@@ -644,6 +722,14 @@ class TargetShooter:
                     panel.log(f"could not lock {color} (yaw err {yaw_err:+.1f}, pitch err {pitch_err:+.1f} deg)")
                     return False
 
+            if target_id is None and getattr(det, "target_id", None):
+                tid = det.target_id
+            # Strict firing confirmation: mapping detections are not sufficient to fire.
+            ok, why = self._fire_candidate_ok(det, tid, kind)
+            if not ok:
+                aim.set_phase("REJECTED")
+                panel.log(f"{tid}: not firing - {why}")
+                return False
             # range rule: pinhole estimate, confirmed by the gimbal ToF when it agrees
             dist = det.distance_m
             tof = self.get_tof_mm()
@@ -686,7 +772,11 @@ class TargetShooter:
             # until it falls (or max_shots_per_target). Fallen -> stop, next target.
             fired = 0
             while True:
+                if not panel.checkpoint():
+                    return bool(fired)
                 self._onto_middle()
+                if not panel.checkpoint():
+                    return bool(fired)
                 try:
                     self.ep_robot.blaster.fire(fire_type=self.fire_type, times=self.shots)
                 except Exception as e:
@@ -695,10 +785,14 @@ class TargetShooter:
                         panel.map.mark_shot(tid)
                     return bool(fired)
                 fired += 1
+                self.shot_counts[tid] = self.shot_counts.get(tid, 0) + 1
                 aim.set_phase("FIRE")
                 self._fire_sound()
                 self._led(255, 0, 0, "flash")
                 panel.log(f"FIRE {fired} -> {det.label} at {dist:.2f} m")
+                if self._accept_practice_fire(tid, det):
+                    time.sleep(0.2)
+                    return True
                 if not self.confirm_fall:
                     panel.map.mark_shot(tid)
                     time.sleep(0.5)
@@ -716,15 +810,15 @@ class TargetShooter:
                                   f"(press Aim trim {'Up' if self._bracket > 0 else 'Down'} + Save to keep it)")
                     self._bracket = 0.0
                     return True
-                if fired >= self.max_shots:
+                if self.shot_counts[tid] >= self.max_shots:
                     self._bracket = 0.0
-                    panel.map.mark_shot(tid)
                     with panel.map.lock:
                         if tid in panel.map.targets:
                             panel.map.targets[tid]["missed"] = True     # mop-up may try it once more
                     aim.set_phase("STANDING")
-                    panel.log(f"{det.label} still standing after {fired} shots - moving on")
-                    return True
+                    panel.log(f"{det.label} still standing after {self.shot_counts[tid]} shots - "
+                              "NOT HIT, per-target limit reached")
+                    return False
                 # still there: the last bead missed. With the aim on the middle that is the trim
                 # (the beads go a bit high / low): aim a little higher, then a little lower
                 det = still

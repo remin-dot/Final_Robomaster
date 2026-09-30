@@ -107,6 +107,7 @@ class ChassisController:
         self.CORNER_SIDE_CM = float(corner_cfg.get("confirm_side_cm", 12))
         self.CORNER_HOLD_STOP_S = float(corner_cfg.get("single_hold_stop_s", 0.35))
         self.CORNER_SLOW_FRAC = float(corner_cfg.get("caution_speed_fraction", 0.25))
+        self.CORNER_STEER_MPS = float(corner_cfg.get("avoid_steer_speed", 0.10))
         self._corner_warned = {}
         self.HEADING_GUARD_DEG = float(move_cfg.get("heading_guard_deg", 12.0))
         self.CELL_SPEED = float(move_cfg.get("cell_speed", 0.45))       # m/s for one-block moves
@@ -147,8 +148,16 @@ class ChassisController:
         self.SWEEP_WIN_DEG = float(move_cfg.get("sweep_window_deg", 10))
         self.SWEEP_CHECKS = int(move_cfg.get("sweep_still_looks", 4))
         self._sweep_checks_cfg = self.SWEEP_CHECKS
+        # A continuous sweep can miss a target because the useful frame is blurred or
+        # the colour mask briefly fails. Keep a bounded settled-look fallback, reduced
+        # or skipped when the round-time budget becomes critical.
+        self.SWEEP_FALLBACK_LOOKS = int(move_cfg.get("sweep_fallback_still_looks", 4))
+        self.SWEEP_FALLBACK_MIN_REMAINING_S = float(
+            move_cfg.get("sweep_fallback_min_remaining_s", 120.0))
         self.hurry = False
         self.END_RESERVE_S = float(move_cfg.get("end_reserve_s", 90))   # kept for second looks + shooting
+        self.COVERAGE_TARGET_S = float(move_cfg.get(
+            "coverage_target_s", max(60.0, 600.0 - self.END_RESERVE_S)))
         self.TOF_LATENCY_S = float(move_cfg.get("tof_latency_s", 0.05))
         # the chassis never turns: it keeps one heading and slides every way (mecanum)
         self.FIXED_HEADING = bool(move_cfg.get("fixed_heading", True))
@@ -181,12 +190,18 @@ class ChassisController:
         self.MOTION_MIN_FRAMES = int(vis_cfg.get("motion_min_frames", 3))       # colour-only sightings
         self._motion_checks_cfg = self.MOTION_CHECKS
         self.MOTION_MAX_ELEV_DEG = float(vis_cfg.get("motion_max_elev_deg", 4.0))  # colour-only: not above this
+        self.SCAN_PITCH_DEG = float(vis_cfg.get("scan_pitch_deg", -5.0))
+        self.CANDIDATE_CONFIRM_FRAMES = int(vis_cfg.get("candidate_confirm_frames", 5))
+        self.CANDIDATE_CONFIRM_MIN_HITS = int(vis_cfg.get("candidate_confirm_min_hits", 2))
+        self.CAMERA_STALE_S = float(vis_cfg.get("camera_stale_s", 1.0))
+        self.CAMERA_RECOVER_WAIT_S = float(vis_cfg.get("camera_recover_wait_s", 3.0))
         self.SLIDE_HOLD_KP = float(move_cfg.get("slide_hold_kp", 2.5))   # sideways slide: pull back front-back drift
         self.SLIDE_HOLD_KI = float(move_cfg.get("slide_hold_ki", 6.0))
         # slide sideways / backwards instead of turning the chassis (mecanum wheels)
         self.strafe = bool(move_cfg.get("strafe_moves", True)) and \
             str(move_cfg.get("move_style", "face")).lower() != "face"
         self.recenter_enabled = bool(move_cfg.get("recenter", True))
+        self.CENTER_BEFORE_TURN = bool(move_cfg.get("center_before_turn", True))
         self.CENTER_TOF_MM = float(move_cfg.get("center_tof_mm", 170))  # ToF to a wall 0.3 m away, robot centred
         self.RECENTER_DEADBAND_MM = float(move_cfg.get("recenter_deadband_mm", 40))
         self.RECENTER_MAX_M = float(move_cfg.get("recenter_max_m", 0.10))
@@ -197,6 +212,7 @@ class ChassisController:
         self.verify_enabled = bool(vis_cfg.get("verify_sweep", True))
         self._swept_cells = set()       # blocks that had their full close look
         self._guesses = []              # maybe-cards seen (cut by the picture edge / odd outline)
+        self._candidate_checked = set() # (cell, colour, direction bin), one focused check each
         self._not_cards = []            # (colour, x, y) checked by a look-back: not a card
         self._looked_back = set()       # blocks that already had their look-back
         self._odom0 = None              # (x, y, yaw_origin) when the map was fixed
@@ -218,6 +234,8 @@ class ChassisController:
         self.GOOD_SHOT_M = float(shoot_cfg.get("good_shot_m", 0.95))
         self.GOOD_SHOT_VIEW = float(shoot_cfg.get("good_shot_view_deg", 30))
         self.BACK_OFF_M = float(shoot_cfg.get("back_off_max_m", 0.08))   # room inside a block
+        self.SHOOT_SEARCH_OFFSETS = tuple(
+            float(x) for x in shoot_cfg.get("search_offsets_deg", [0, -12, 12]))
         # end of round 1: drive back to cards that were found but not hit yet
         self.mop_up = bool(shoot_cfg.get("mop_up_round1", True))
         self.MOP_UP_RESERVE_S = float(shoot_cfg.get("mop_up_reserve_s", 90))
@@ -288,6 +306,12 @@ class ChassisController:
         self._left_cm, self._right_cm = self.ir.latest()
         return self._left_cm, self._right_cm
 
+    def _control_side_ir(self):
+        """Side distances for steering; ``None`` means missing/untrustworthy sensor."""
+        left, right = self.read_side_ir()
+        return (left if self.ir.usable("left") else None,
+                right if self.ir.usable("right") else None)
+
     # ------------------------------------------------------------------
     # CSV / callbacks
     # ------------------------------------------------------------------
@@ -347,13 +371,14 @@ class ChassisController:
     # ------------------------------------------------------------------
     def _drive_start(self):
         """Call when a drive / turn starts: remembers where the chassis was."""
-        self._drv = (time.time(), self.pos_x, self.pos_y, self.current_yaw)
+        self._drv = (time.time(), getattr(self, "pos_x", 0.0),
+                     getattr(self, "pos_y", 0.0), getattr(self, "current_yaw", 0.0))
 
     def _wheels_dead(self):
         """True when drive commands have gone out for WHEEL_CHECK_S and nothing answered:
         no wheel turned (ESC), no odometry, no yaw change. False while it cannot tell yet."""
         d = getattr(self, "_drv", None)
-        if d is None or not self.WHEEL_CHECK_S:
+        if d is None or not getattr(self, "WHEEL_CHECK_S", 0):
             return False
         t0, x0, y0, yaw0 = d
         if time.time() - t0 < self.WHEEL_CHECK_S:
@@ -396,7 +421,7 @@ class ChassisController:
         self._log("chassis still not answering: round PAUSED - check the chassis battery / power switch, "
                   "that the robot is not held in the DJI app or by its protection lock, lift and set it "
                   "down, then press Resume (or restart the robot and reconnect)")
-        if self.panel is not None:
+        if getattr(self, "panel", None) is not None:
             self.panel.paused.set()
             self.panel.checkpoint()          # waits here until Resume / STOP
         self._drv = None
@@ -503,19 +528,24 @@ class ChassisController:
         """Move a few centimetres away from a corner that stopped the chassis."""
         hits = tuple(hits)
         left_cm, right_cm = self.ir.latest()
-        if hits == ("left",) and right_cm >= self.TURN_CLEAR_SIDE_CM:
+        if hits == ("left",) and self.ir.usable("right") and right_cm >= self.TURN_CLEAR_SIDE_CM:
             self._log("front-left IR: shift right before retry")
             self.nudge(90.0, 0.04)
-        elif hits == ("right",) and left_cm >= self.TURN_CLEAR_SIDE_CM:
+        elif hits == ("right",) and self.ir.usable("left") and left_cm >= self.TURN_CLEAR_SIDE_CM:
             self._log("front-right IR: shift left before retry")
             self.nudge(-90.0, 0.04)
         else:
-            self._log("front-corner IR: back away before retry")
-            self.nudge(180.0, 0.06)
+            self._log("front-corner IR: no verified clear side - hold position, do not reverse blind")
+            return False
+        return True
 
     def _retryable_move_failure(self):
         note = self.last_move_note or ""
-        return "IR emergency stop" in note or note == "turn stopped by safety guard"
+        # A safety stop proves only that moving is unsafe *now*.  It is not evidence of a
+        # permanent maze wall: people, a stale ToF frame, loss of centring and corner IR can
+        # all trigger it.  Real walls come from the stationary four-way scan.  Keeping these
+        # edges temporary prevents a false wall from cutting off unvisited map cells.
+        return bool(note)
 
     def _corner_hard_stop(self, hits, since, now):
         return len(hits) >= 2 or any(
@@ -524,7 +554,7 @@ class ChassisController:
         )
 
     def _log(self, msg):
-        if self.panel is not None:
+        if getattr(self, "panel", None) is not None:
             self.panel.log(msg)
         else:
             print(msg)
@@ -700,6 +730,8 @@ class ChassisController:
             return self.safe_move_forward(distance=distance, target_heading_deg=self.heading_to_yaw(d),
                                           camera_guard=camera_guard, speed=speed), d
         yaw = self.heading_to_yaw(d)
+        if self.CENTER_BEFORE_TURN:
+            self._center_in_cell(self.heading_to_yaw(heading), duration=min(0.6, self.CENTER_TIME_S))
         if not self.turn_to_absolute_yaw(yaw):
             self.last_move_note = "turn stopped by safety guard"
             return False, heading
@@ -896,25 +928,38 @@ class ChassisController:
         until the gaps are even (within the PID dead band) - the next scan and turn start from
         the middle of the block."""
         if self.wall_pid is None or self.ir.mount != "side":
-            return
+            return True
+        if not (self.ir.usable("left") or self.ir.usable("right")):
+            self._log("centre check unavailable: both side IR sensors offline - not assuming centred")
+            self._stop(0.1)
+            return False
         target_yaw = self.current_yaw if target_yaw is None else target_yaw
         t_end = time.time() + (self.CENTER_TIME_S if duration is None else duration)
         self.wall_pid.reset()
+        centred = False
+        last_err = 0.0
         try:
             while time.time() < t_end:
                 if self.panel is not None and self.panel.abort.is_set():
                     break
-                l_cm, r_cm = self.read_side_ir()
-                err, _ = self.wall_pid.lateral_error(l_cm * 10.0 if l_cm < self.ir.max_cm - 1 else None,
-                                                     r_cm * 10.0 if r_cm < self.ir.max_cm - 1 else None)
+                l_cm, r_cm = self._control_side_ir()
+                err, _ = self.wall_pid.lateral_error(
+                    l_cm * 10.0 if l_cm is not None and l_cm < self.ir.max_cm - 1 else None,
+                    r_cm * 10.0 if r_cm is not None and r_cm < self.ir.max_cm - 1 else None)
+                last_err = err
                 vy = self.wall_pid.center(err, dt=0.05)
                 vz = self.wall_pid.yaw(wrap180(target_yaw - self.current_yaw), dt=0.05)
                 if abs(err) < self.wall_pid.tol_mm and abs(vz) < 1.0:
+                    centred = True
                     break
                 self.ep_chassis.drive_speed(x=0, y=vy, z=self.z_sign * vz)
                 time.sleep(0.05)
         finally:
             self._stop(0.1)
+        if not centred and self.panel is not None and not self.panel.abort.is_set():
+            self._log(f"centre check ended with lateral error {last_err / 10.0:+.1f} cm; "
+                      "continuing slowly with collision guards")
+        return centred
 
     def _fine_align(self, target_yaw, timeout=3.0):
         """After a turn: slow closed-loop correction until the heading is within FINE_TURN_TOL
@@ -941,9 +986,11 @@ class ChassisController:
                           camera_guard=True, body_dir=0):
         """Drive one cell. body_dir = which way relative to the chassis: 0 forward, 1 right,
         2 back, 3 left - the mecanum wheels slide sideways / backwards without turning, and the
-        gimbal (ToF + camera) points the way it drives to guard it. camera_guard=False on a way
-        already driven through (backtracking): it is known to be open, so only the ToF
-        emergency stop applies. self.last_move_note says why a move gave up."""
+        gimbal (ToF + camera) points the way it drives to guard it. camera_guard=True performs
+        the full left/centre/right corridor pre-scan; ``"direct"`` is used immediately after a
+        stationary scan proved this edge open and keeps the straight ToF + camera guards
+        without repeating three gimbal rays; False is for an edge already driven through.
+        self.last_move_note says why a move gave up."""
         self.last_move_note = ""
         if speed is None:
             speed = self.CELL_SPEED
@@ -964,7 +1011,7 @@ class ChassisController:
             if not self.turn_to_absolute_yaw(target_heading_deg):
                 self.last_move_note = "unsafe or failed heading correction before move"
                 return False
-        if camera_guard:
+        if camera_guard is True:
             self._last_rays = []
             obstacle_m = self._path_clearance_scan(body_dir)
             if obstacle_m is not None:
@@ -1182,13 +1229,15 @@ class ChassisController:
                 z_cmd = self.z_sign * z_val
 
                 left_cm, right_cm = self.read_side_ir()
+                left_ctl = left_cm if self.ir.usable("left") else None
+                right_ctl = right_cm if self.ir.usable("right") else None
                 if body_dir in (0, 2) and progress >= 0.55:
                     self._side_samples.append((left_cm, right_cm))
                 y_speed = 0.0
 
                 corner_acted = False
                 if body_dir == 0 and corner_hits:
-                    y_speed = self.STRAFE_V if "left" in corner_hits else -self.STRAFE_V
+                    y_speed = self.CORNER_STEER_MPS if "left" in corner_hits else -self.CORNER_STEER_MPS
                     v_forward = min(v_forward, max(self.MIN_V, speed * self.CORNER_SLOW_FRAC))
                     corner_acted = True
                 x_corr = 0.0
@@ -1206,8 +1255,8 @@ class ChassisController:
                     if self.ir.corners_enabled and (self.ir.near("left") or self.ir.near("right")):
                         x_corr = -self.STRAFE_V            # front close to a wall: ease back
                     # the Sharp on the side it slides towards is a bumper
-                    ahead_cm = right_cm if body_dir == 1 else left_cm
-                    if ahead_cm < self.SIDE_DANGER_CM:
+                    ahead_cm = right_ctl if body_dir == 1 else left_ctl
+                    if ahead_cm is not None and ahead_cm < self.SIDE_DANGER_CM:
                         self._stop(0.3)
                         if progress >= 0.80 or self._arrived_short(progress, self.current_tof_dist_mm):
                             return True
@@ -1217,21 +1266,22 @@ class ChassisController:
                         return False
                 if self.ir.mount == "side" and not corner_acted and body_dir in (0, 2):
                     # Sharp distance sensors on the sides: keep off the side walls
-                    if left_cm < self.SIDE_SAFE_CM and left_cm <= right_cm:
+                    if left_ctl is not None and left_ctl < self.SIDE_SAFE_CM and \
+                            (right_ctl is None or left_ctl <= right_ctl):
                         y_speed = self.STRAFE_V
-                    elif right_cm < self.SIDE_SAFE_CM:
+                    elif right_ctl is not None and right_ctl < self.SIDE_SAFE_CM:
                         y_speed = -self.STRAFE_V
                     elif self.wall_pid is not None:
                         # wall centering PID: both walls -> equal gaps, one wall -> its nominal
                         # gap, none -> hold the line (Dhai_8's 8 wall cases)
                         err, _case = self.wall_pid.lateral_error(
-                            left_cm * 10.0 if left_cm < self.ir.max_cm - 1 else None,
-                            right_cm * 10.0 if right_cm < self.ir.max_cm - 1 else None)
+                            left_ctl * 10.0 if left_ctl is not None and left_ctl < self.ir.max_cm - 1 else None,
+                            right_ctl * 10.0 if right_ctl is not None and right_ctl < self.ir.max_cm - 1 else None)
                         y_speed = self.wall_pid.lateral(err, dt=0.05)
                     elif left_cm < self.ir.max_cm - 2 and right_cm < self.ir.max_cm - 2:
                         # กำแพงสองข้าง ประคองกลางทาง (left มากกว่า = ชิดขวา -> เลื่อนซ้าย)
                         y_speed = max(min(-0.01 * (left_cm - right_cm), 0.15), -0.15)
-                    if min(left_cm, right_cm) < self.SIDE_DANGER_CM:
+                    if any(v is not None and v < self.SIDE_DANGER_CM for v in (left_ctl, right_ctl)):
                         v_forward = min(v_forward, speed * 0.4)
                     # drifted off the block's centre line (slip, a bad reading): stop, not hit
                     if pos_ok and self.MAX_LATERAL_M > 0:
@@ -1325,15 +1375,44 @@ class ChassisController:
         return False
 
     def _retreat(self, traveled, sx, sy, pos_ok, speed, body_dir=0):
-        """ถอยกลับเข้ากลางช่องเดิม (back the way it came, in any direction)"""
+        """Return toward the previous cell with the ToF watching the retreat direction."""
         if traveled <= 0.03:
             return
+        if not (self.ir.usable("left") or self.ir.usable("right")):
+            self._log("retreat cancelled: both side IR sensors offline; refusing a blind reverse")
+            self._stop(0.2)
+            return
         print("-> [Retreat] ถอยกลับเข้ากลางช่องเดิม")
-        v = min(speed, 0.2)
+        v = min(speed, 0.12)
+        retreat_dir = (body_dir + 2) % 4
+        watched = self._gimbal_moveto(
+            pitch=0, yaw=self.GIMBAL_FOR_BODY[retreat_dir],
+            pitch_speed=min(240, self.GIMBAL_DPS), yaw_speed=self.GIMBAL_DPS,
+            what="watch retreat path",
+        )
+        if watched:
+            rear = self._tof_fresh(2, timeout=0.4)
+            if 60 < rear <= self.FRONT_STOP_MM:
+                self._log(f"retreat cancelled: wall {rear:.0f} mm behind")
+                return
+
+        def retreat_clear():
+            if self.panel is not None and self.panel.abort.is_set():
+                return False
+            if not watched:
+                return True
+            mm = self._tof_recent(0.3)
+            if mm is not None and 60 < mm <= self.FRONT_STOP_MM:
+                self._log(f"retreat stopped: wall {mm:.0f} mm behind")
+                return False
+            return True
+
         if body_dir:
             ux, uy = {1: (0, -1), 2: (1, 0), 3: (0, 1)}[body_dir]
             t0 = time.time()
             while time.time() - t0 < (3.0 if pos_ok else traveled / v):
+                if not retreat_clear():
+                    break
                 if pos_ok and math.hypot(self.pos_x - sx, self.pos_y - sy) <= 0.02:
                     break
                 self.ep_chassis.drive_speed(x=ux * v, y=uy * v, z=0)
@@ -1343,13 +1422,17 @@ class ChassisController:
         if pos_ok:
             t0 = time.time()
             while time.time() - t0 < 3.0:
+                if not retreat_clear():
+                    break
                 if math.hypot(self.pos_x - sx, self.pos_y - sy) <= 0.02:
                     break
                 self.ep_chassis.drive_speed(x=-v, y=0, z=0)
                 time.sleep(0.05)
         else:
-            self.ep_chassis.drive_speed(x=-v, y=0, z=0)
-            time.sleep(traveled / v)
+            t_end = time.time() + traveled / v
+            while time.time() < t_end and retreat_clear():
+                self.ep_chassis.drive_speed(x=-v, y=0, z=0)
+                time.sleep(0.05)
         self._stop(0.4)
 
     # ------------------------------------------------------------------
@@ -1395,7 +1478,8 @@ class ChassisController:
                 acc = getattr(self, "_imu_acc", None)
                 bump = acc and time.time() - acc[0] < 0.1 and time.time() - start_time > 0.3 and \
                     math.hypot(acc[1], acc[2]) > self.BUMP_G
-                if bump or (self.ir.mount == "side" and min(l_cm, r_cm) <= self.SIDE_HIT_CM - 1):
+                if bump or (getattr(self.ir, "mount", "side") == "side" and
+                             min(l_cm, r_cm) <= getattr(self, "SIDE_HIT_CM", 5.0) - 1):
                     self._stop(0.2)
                     self._log("EMERGENCY STOP while turning: " + (f"IMU bump {math.hypot(acc[1], acc[2]):.2f} g"
                               if bump else f"side wall {min(l_cm, r_cm):.0f} cm") + " - making room")
@@ -1438,25 +1522,39 @@ class ChassisController:
         ToF 130 mm) and hit the wall hard. Before a turn: side Sharps, front-corner IR and the
         front ToF (when the gimbal looks ahead) must show room - if not, slide away from what
         is close first. Returns True when there is room now."""
-        left_cm, right_cm = self.read_side_ir()
+        left_cm, right_cm = self._control_side_ir()
         front_near = bool(self.ir.corners_enabled and (self.ir.near("left") or self.ir.near("right")))
         tof = self.current_tof_dist_mm
         if abs(getattr(self, "_gimbal_yaw_now", 0.0)) < 15 and 60 < tof < self.TURN_CLEAR_TOF_MM:
             front_near = True
-        side_l = left_cm < self.TURN_CLEAR_SIDE_CM
-        side_r = right_cm < self.TURN_CLEAR_SIDE_CM
+        side_l = left_cm is not None and left_cm < self.TURN_CLEAR_SIDE_CM
+        side_r = right_cm is not None and right_cm < self.TURN_CLEAR_SIDE_CM
         if not (front_near or side_l or side_r):
             return True
-        self._log(f"too close to turn (Sharp L {left_cm:.0f} / R {right_cm:.0f} cm, front "
+        fmt = lambda v: f"{v:.0f}" if v is not None else "n/a"
+        self._log(f"too close to turn (Sharp L {fmt(left_cm)} / R {fmt(right_cm)} cm, front "
                   f"{'near' if front_near else 'clear'}) - making room first")
         if front_near:
-            self.nudge(180.0, 0.06)                       # back off from the wall ahead
+            # Never reverse without a rear sensor.  Move sideways only when the Sharp on
+            # that side is alive and explicitly reports enough room.
+            choices = []
+            if self.ir.usable("right") and right_cm is not None and right_cm >= self.TURN_CLEAR_SIDE_CM:
+                choices.append((right_cm, 90.0))
+            if self.ir.usable("left") and left_cm is not None and left_cm >= self.TURN_CLEAR_SIDE_CM:
+                choices.append((left_cm, -90.0))
+            if choices:
+                _, angle = max(choices)
+                self.nudge(angle, 0.04)
+            else:
+                self._log("front too close and no verified clear side - hold position; no blind reverse")
+                return False
         if side_l and not side_r:
             self.nudge(90.0, min(0.08, (self.TURN_CLEAR_SIDE_CM - left_cm) / 100.0 + 0.02))
         elif side_r and not side_l:
             self.nudge(-90.0, min(0.08, (self.TURN_CLEAR_SIDE_CM - right_cm) / 100.0 + 0.02))
-        left_cm, right_cm = self.read_side_ir()
-        return min(left_cm, right_cm) >= self.TURN_CLEAR_SIDE_CM and not (
+        left_cm, right_cm = self._control_side_ir()
+        sides_clear = all(v is None or v >= self.TURN_CLEAR_SIDE_CM for v in (left_cm, right_cm))
+        return sides_clear and not (
             self.ir.corners_enabled and (self.ir.near("left") or self.ir.near("right")))
 
     def heading_to_yaw(self, heading_index):
@@ -1659,7 +1757,7 @@ class ChassisController:
                 return False
             if t["kind"] not in p.selected or self._card_done(t):
                 return True
-            return not p.map.in_reach(pos, t["id"], self.reach_cells)
+            return False                 # selected and still up: a fresh view must try to fire now
         mapped = [(t["color"], math.degrees(math.atan2(t["x_m"] - cx, t["y_m"] - cy)) % 360)
                   for t in p.map.target_list(False) if settled(t)]
         half = self.SEE_HALF_FOV_DEG - 4.0
@@ -1669,9 +1767,11 @@ class ChassisController:
             e = sorted(elevs)[len(elevs) // 2]
             if any(mc == c and abs(wrap180(ma - a)) < 10.0 for mc, ma in mapped):
                 continue                               # a card already on the map
-            if any(t["color"] == c and abs(wrap180(math.degrees(math.atan2(t["x_m"] - cx, t["y_m"] - cy)) - a)) < 15.0
-                   and (t.get("confirmed") or t["shot"]) for t in p.map.target_list(False)):
-                continue                               # that card again (can't be shot from here anyway)
+            if any(t["color"] == c and
+                   abs(wrap180(math.degrees(math.atan2(t["x_m"] - cx, t["y_m"] - cy)) - a)) < 15.0 and
+                   (t["kind"] not in p.selected or self._card_done(t))
+                   for t in p.map.target_list(False)):
+                continue                               # already hit or deliberately not selected
             if not any(kinds - {None}) and len(yaws) < self.MOTION_MIN_FRAMES:
                 continue                               # colour only, in too few frames
             wx, wy = p.map.wall_point(pos, a)
@@ -1692,7 +1792,9 @@ class ChassisController:
                 return
             self._motion_checked.append((tuple(pos), c, a))
             rel = wrap180(a - base)
-            pit = max(-20.0, min(20.0, e))
+            # Elevation is relative to the image centre.  The map sweep itself looks
+            # slightly down, so preserve that base pitch when stopping on the sighting.
+            pit = max(-20.0, min(20.0, self.SCAN_PITCH_DEG + e))
             if not self._gimbal_moveto(pitch=pit, yaw=rel, pitch_speed=min(240, self.GIMBAL_DPS), yaw_speed=self.GIMBAL_DPS,
                                        what="check a sighting from a turn"):
                 continue
@@ -1706,8 +1808,8 @@ class ChassisController:
                   f"{'inside' if covered else 'outside'} the still looks) - looked again: "
                   + (f"confirmed {new[0]['kind']}" if new else "nothing new there"))
         if todo:
-            self._gimbal_moveto(pitch=0, yaw=getattr(self, "_gimbal_yaw_now", 0.0), pitch_speed=min(240, self.GIMBAL_DPS),
-                                yaw_speed=self.GIMBAL_DPS, what="level after sighting checks")
+            self._gimbal_moveto(pitch=self.SCAN_PITCH_DEG, yaw=getattr(self, "_gimbal_yaw_now", 0.0), pitch_speed=min(240, self.GIMBAL_DPS),
+                                yaw_speed=self.GIMBAL_DPS, what="restore map-scan pitch")
 
     def _sweep_scan(self, known):
         """One continuous gimbal sweep (no stops) over the directions still unknown: the ToF is
@@ -1730,7 +1832,7 @@ class ChassisController:
         start = a0 - pad if a1 >= a0 else a0 + pad
         end = a1 + pad if a1 >= a0 else a1 - pad
         start, end = max(-240.0, min(240.0, start)), max(-240.0, min(240.0, end))
-        if not self._gimbal_moveto(pitch=0, yaw=start, pitch_speed=min(240, self.GIMBAL_DPS),
+        if not self._gimbal_moveto(pitch=self.SCAN_PITCH_DEG, yaw=start, pitch_speed=min(240, self.GIMBAL_DPS),
                                    yaw_speed=self.GIMBAL_DPS, what="sweep start"):
             return self._stop_scan(known)
         t_scan = time.time()
@@ -1773,15 +1875,35 @@ class ChassisController:
                 distances[label] = vals[len(vals) // 2]
             else:
                 # the sweep missed it (ToF gap): one still reading there
-                if self._gimbal_moveto(pitch=0, yaw=yaw, pitch_speed=min(240, self.GIMBAL_DPS),
+                if self._gimbal_moveto(pitch=self.SCAN_PITCH_DEG, yaw=yaw, pitch_speed=min(240, self.GIMBAL_DPS),
                                        yaw_speed=self.GIMBAL_DPS, what=f"scan {label}"):
                     distances[label] = self._tof_fresh(3)
             if ctx:
                 self._looks.append((tuple(ctx[0]), (base + yaw) % 360))   # that wall face was in view
         self._draw_live_with_gimbal(getattr(self, "_gimbal_yaw_now", 0.0))
-        # the camera: still looks only where a card colour showed up during the sweep
+        # Motion frames are cheap but can miss a card through blur or a temporary colour
+        # threshold failure. Add settled fallback looks while enough time remains.
         if ctx is not None:
-            self._check_motion_sightings(ctx[0], ctx[4], t_scan, [], limit=self.SWEEP_CHECKS)
+            # Map topology has priority. The mission loop records these sweep distances as
+            # open/wall edges first, then performs the focused target check before moving on.
+            self._deferred_motion_scan = (ctx[0], ctx[4], t_scan, [], self.SWEEP_CHECKS)
+            remaining = self.panel.remaining() if self.panel is not None and self.panel.round_t0 else None
+            fallback_n = min(self.SWEEP_FALLBACK_LOOKS, len(seq))
+            if (not self.hurry and fallback_n and
+                    (remaining is None or remaining >= self.SWEEP_FALLBACK_MIN_REMAINING_S)):
+                for label, yaw in seq[:fallback_n]:
+                    if self.panel is not None and (
+                            not self.panel.checkpoint() or
+                            (self.panel.round_t0 and self.panel.remaining() <= self.END_RESERVE_S)):
+                        break
+                    if not self._gimbal_moveto(pitch=self.SCAN_PITCH_DEG, yaw=yaw,
+                                               pitch_speed=min(240, self.GIMBAL_DPS),
+                                               yaw_speed=self.GIMBAL_DPS,
+                                               what=f"fallback still look {label}"):
+                        continue
+                    settled_ts = time.time()
+                    self._draw_live_with_gimbal(yaw)
+                    self._look_for_targets(yaw, pitch=self.SCAN_PITCH_DEG, settle_ts=settled_ts)
         return distances
 
     def _stop_scan(self, known):
@@ -1806,20 +1928,27 @@ class ChassisController:
             scan_sequence.reverse()
 
         self._hook_motion()
+        ctx = getattr(self, "_live_ctx", None)
         t_scan = time.time()
         still_yaws = []
         for label, yaw in scan_sequence:
-            if not self._gimbal_moveto(pitch=0, yaw=yaw, pitch_speed=min(240, self.GIMBAL_DPS),
+            if not self._gimbal_moveto(pitch=self.SCAN_PITCH_DEG, yaw=yaw, pitch_speed=min(240, self.GIMBAL_DPS),
                                        yaw_speed=self.GIMBAL_DPS, what=f"scan {label}"):
                 distances[label] = 0
                 continue
             still_yaws.append(yaw)
             settled_ts = time.time()
+            look_started = time.time()
             distances[label] = self._tof_fresh(3)     # readings taken after the gimbal settled
             if label == "front":
                 self._learn_wall_rise(distances[label])
             self._draw_live_with_gimbal(yaw)
-            self._look_for_targets(yaw, settle_ts=settled_ts)
+            found = self._look_for_targets(yaw, pitch=self.SCAN_PITCH_DEG, settle_ts=settled_ts)
+            if self.panel is not None:
+                result = "TARGET" if found else ("WALL" if distances[label] <= self.wall_mm else "OPEN")
+                self.panel.log(f"LOOK_RESULT cell={tuple(ctx[0]) if ctx else '?'} dir={label} "
+                               f"tof={distances[label]:.0f}mm result={result} "
+                               f"elapsed={time.time() - look_started:.2f}s")
 
         # cards seen only in blurred frames while the gimbal swung between the looks
         ctx = getattr(self, "_live_ctx", None)
@@ -1840,6 +1969,11 @@ class ChassisController:
             return []
         pos, heading = ctx[0], ctx[4]
         abs_deg = ({0: 0, 1: 90, 2: 180, 3: 270}.get(heading, 0) + gimbal_relative_yaw) % 360
+        if hasattr(self.panel, "log"):
+            self.panel.log(f"LOOK cell={tuple(pos)} chassis={heading * 90}deg "
+                           f"gimbal_rel={gimbal_relative_yaw:+.0f}deg "
+                           f"gimbal_abs={abs_deg:.0f}deg pitch={pitch:+.0f}deg "
+                           f"reason={'TARGET_VERIFY' if close else 'MAP_SCAN'}")
         self._looks.append((tuple(pos), abs_deg))          # wall faces in view count as seen
         # looking down the ToF hits the floor: no wall check then
         tof = self.current_tof_dist_mm if abs(pitch) < 1 else None
@@ -1876,15 +2010,17 @@ class ChassisController:
             if twin:
                 self.panel.log(f"{tid} is {twin} again (already hit) - merged, not shooting twice")
                 continue
-            if not self.panel.map.in_reach(pos, tid, self.reach_cells):
-                # not in this block or the next one straight ahead: never shoot across a block
-                if (tid, pos) not in self._reach_noted:
-                    self._reach_noted.add((tid, pos))
-                    self.panel.log(f"{tid} is not next to {pos} - will shoot it from beside it")
-                continue
+            if (tid, tuple(pos)) in self._tried_from:
+                continue                       # one complete aim/fire sequence per target per cell
+            # This is a fresh, full-card camera detection with a measured distance inside the
+            # assignment's two-tile limit.  Do not let the map's cell/wall classification veto
+            # it: cards hang on walls, so the target point can legitimately be assigned to the
+            # cell across that wall (the previous gate rejected a visible green card at 0.59 m).
+            # Map reach remains useful for map-only route planning; live line-of-sight wins here.
             if self._wait_for_better_spot(pos, tid):
                 continue
             kind = self.panel.map.targets[tid]["kind"]   # the map's (voted) kind
+            self._tried_from.add((tid, tuple(pos)))
             if aimed:
                 # the last aim turned the gimbal: back to where this look saw the cards
                 self._gimbal_moveto(pitch=pitch, yaw=gimbal_relative_yaw, pitch_speed=min(240, self.GIMBAL_DPS),
@@ -1913,6 +2049,12 @@ class ChassisController:
         the exploration will still visit gives a good one. Near the end of the time nothing
         waits (the robot may never get there)."""
         p = self.panel
+        # Assignment round 1 is a find-and-shoot pass. Once a selected target is
+        # confirmed and within range, fire from the current safe position instead
+        # of delaying for a theoretically better angle in a later cell. Round 2
+        # remains route-optimised from the saved map.
+        if p.round_no == 1:
+            return False
         d, view = p.map.shot_quality(pos, tid)
         if d is None or (d <= self.GOOD_SHOT_M and (view is None or view <= self.GOOD_SHOT_VIEW)):
             return False
@@ -1930,11 +2072,36 @@ class ChassisController:
         return True
 
     def _check_glimpses(self, pos, heading, g_yaw, pitch):
-        """Cards seen in only one frame of the last look: point the camera straight at each
-        (up to 2) and look again with fresh frames - mapped only if that confirms it."""
+        """Point at brief or partial card candidates and confirm with fresh still frames."""
         p = self.panel
         out = []
-        glimpses = list(getattr(p, "last_single", []))[:2]
+        pending = list(getattr(p, "last_single", []))
+        # A clipped/odd blob is just as useful for directing the camera as a one-frame full
+        # card. Previously these guesses were deferred until a later cell sweep, which is why
+        # visible targets stayed CHECKING and were revisited repeatedly.
+        for g in list(getattr(p, "last_guesses", [])):
+            pending.append({"kind": None, "color": g["color"], "bearing": g["bearing"],
+                            "elevation": g["elevation"], "candidate": True})
+        glimpses = []
+        chassis_abs = {0: 0, 1: 90, 2: 180, 3: 270}.get(heading, 0)
+        for s1 in pending:
+            absolute = (chassis_abs + g_yaw + s1["bearing"]) % 360
+            # A one-frame view of a card already mapped/verified (or dry-locked/shot) is not a
+            # new candidate. Keep scanning; do not swing the gimbal back to the same target.
+            dist = s1.get("distance")
+            if s1.get("kind") and dist:
+                tx, ty = p.map.project(pos, absolute, dist)
+                known = p.map._find_card(s1["kind"], tx, ty, dist_m=dist)
+                if known and known in p.map.targets:
+                    kt = p.map.targets[known]
+                    if kt.get("verified") or self._card_done(p.map._target_view(kt)):
+                        continue
+            key = (tuple(pos), s1["color"], int((absolute + 10) // 20) % 18)
+            if key in self._candidate_checked:
+                continue
+            self._candidate_checked.add(key)
+            glimpses.append(s1)
+            break                         # one focused candidate check per settled map look
         for s1 in glimpses:
             if not p.checkpoint():
                 break
@@ -1946,10 +2113,17 @@ class ChassisController:
             time.sleep(0.1)
             p.detector.gimbal_pitch_deg = pit
             abs_deg = ({0: 0, 1: 90, 2: 180, 3: 270}.get(heading, 0) + yaw) % 360
+            # Spend extra frames only where the normal scan actually saw a candidate.  Two
+            # agreeing still frames out of five recover short blur/exposure drop-outs without
+            # slowing every map direction or weakening the final firing lock.
+            frames = int(getattr(self, "CANDIDATE_CONFIRM_FRAMES", 5))
+            hits = int(getattr(self, "CANDIDATE_CONFIRM_MIN_HITS", 2))
             got = p.observe_targets(pos, abs_deg, tof_mm=self.current_tof_dist_mm if abs(pit) < 1 else None,
-                                    settle_ts=time.time())
-            hit = [d for d in got if d.kind == s1["kind"] or d.color == s1["color"]]
-            p.log(f"{s1['kind']} glimpsed in one frame - looked again: {'confirmed' if hit else 'nothing there'}")
+                                    settle_ts=time.time(), frames=frames, min_hits=hits)
+            hit = [d for d in got if (s1.get("kind") and d.kind == s1["kind"]) or
+                   d.color == s1["color"]]
+            label = s1.get("kind") or f"{s1['color']} candidate"
+            p.log(f"{label} seen briefly - still-frame check: {'confirmed' if hit else 'nothing there'}")
             out += got
         if glimpses:
             # back to where this look was pointing
@@ -1957,6 +2131,10 @@ class ChassisController:
                                 yaw_speed=self.GIMBAL_DPS, what="restore glimpse scan")
             p.detector.gimbal_pitch_deg = pitch
         p.last_single = []
+        # Every candidate above already received a focused five-frame still check. Do not
+        # enqueue the same partial blob for verify_sweep/_resolve_guesses again; that was the
+        # source of repeated camera turns and long runs stuck on CHECKING.
+        p.last_guesses = []
         return out
 
     def verify_sweep(self, pos):
@@ -1967,13 +2145,18 @@ class ChassisController:
         p = self.panel
         if p is None:
             return
-        ids = p.map.to_verify(pos)
+        ids = [tid for tid in p.map.to_verify(pos)
+               if tid in p.map.targets and
+               not self._card_done(p.map._target_view(p.map.targets[tid]))]
         # a block with a card in it gets one full close look even when that card is sure:
         # another card may hang on the opposite wall, and cards on the side walls are only
         # seen face-on (true shape) from inside the block. A maybe-card (half in the picture)
         # seen from here also earns one.
         fresh = tuple(pos) not in self._swept_cells
-        own = p.map.cards_in(pos) if fresh else []
+        own = [tid for tid in p.map.cards_in(pos)
+               if tid in p.map.targets and
+               not p.map.targets[tid].get("verified") and
+               not self._card_done(p.map._target_view(p.map.targets[tid]))] if fresh else []
         maybe = [g for g in self._guesses if g["cell"] == tuple(pos)] if fresh else []
         self._guesses = [g for g in self._guesses if g["cell"] != tuple(pos)]
         if not ids and not own and not maybe:
@@ -2781,7 +2964,7 @@ class ChassisController:
                 choice = (key, c, st)
         if choice is None:
             return None, None
-        if visit_all and self.TOUR_PLAN:
+        if visit_all and getattr(self, "TOUR_PLAN", True):
             # look ahead: the order that visits EVERY block still to see in the fewest moves,
             # not just the nearest one (last run left (5,1) behind and drove 8 moves back to it)
             cands = [c for c in reach if c != tuple(pos) and c not in visited]
@@ -2935,7 +3118,7 @@ class ChassisController:
             near_m = math.hypot(t["x_m"] - cx, t["y_m"] - cy)
             pitch = self.verify_pitch_deg if near_m < 0.5 else 0.0     # in this block: look down at it
             p.log(f"shooting {t['id']} from {tuple(pos)}" + (" (inside its block, camera down)" if pitch else ""))
-            for off in (0, -12, 12):
+            for off in self.SHOOT_SEARCH_OFFSETS:
                 if not self._gimbal_moveto(pitch=pitch, yaw=wrap180(g + off), pitch_speed=min(240, self.GIMBAL_DPS),
                                            yaw_speed=self.GIMBAL_DPS, what="shoot-here search"):
                     continue
@@ -2981,6 +3164,8 @@ class ChassisController:
         at and locked once (it will never be 'hit', so it must not keep drawing the robot)."""
         if t["shot"]:
             return True
+        if t.get("missed"):
+            return True                    # strict per-target shot cap: never focus it again
         sh = self.shooter
         return sh is not None and not sh.armed and t["id"] in sh.dry_locked
 
@@ -3096,14 +3281,38 @@ class ChassisController:
         if p is None or not p.round_t0 or n_visited < 4:
             return
         per = p.elapsed() / max(n_visited, 1)
-        need = per * max(total - n_visited, 0) + self.END_RESERVE_S
-        hurry = p.remaining() < need
+        blocks_left = max(total - n_visited, 0)
+        predicted_coverage_end = p.elapsed() + per * blocks_left
+        # Round 1 has a hard 10-minute limit, but coverage targets 7:30. The remaining
+        # 2:30 belongs to shot retries, temporarily unsafe edges and final map gaps.
+        hurry = predicted_coverage_end > self.COVERAGE_TARGET_S
         if hurry and not self.hurry:
-            self._log(f"behind schedule ({per:.0f} s per block, {total - n_visited} blocks left, "
-                      f"{p.remaining():.0f} s left): fewer extra looks from now on")
+            self._log(f"behind 7:30 coverage target ({per:.0f} s per block, {blocks_left} blocks left, "
+                      f"predicted finish {predicted_coverage_end:.0f} s): candidate-only checks from now on")
         self.hurry = hurry
         self.SWEEP_CHECKS = 1 if hurry else self._sweep_checks_cfg
         self.MOTION_CHECKS = 1 if hurry else self._motion_checks_cfg
+
+    def _camera_ready_for_scan(self):
+        """Do not map or leave a cell using a frozen frame from a dropped Wi-Fi stream."""
+        p = self.panel
+        if p is None:
+            return True
+        _, _, ts, _ = p.worker.latest()
+        if ts and time.time() - ts <= self.CAMERA_STALE_S:
+            return True
+        p.log("camera frame is stale - waiting for live video before scanning or moving")
+        end = time.time() + self.CAMERA_RECOVER_WAIT_S
+        while time.time() < end and p.checkpoint():
+            _, _, ts, _ = p.worker.latest()
+            if ts and time.time() - ts <= self.CAMERA_STALE_S:
+                p.log("camera live again - resuming")
+                return True
+            time.sleep(0.05)
+        if p.checkpoint():
+            p.log("camera still has NO SIGNAL - stopping instead of passing targets on a frozen image")
+            p.abort.set()
+        return False
 
     def _second_looks(self, pos, heading):
         """Cards seen only nearly edge-on (too slanted to map): drive to a block that sees that
@@ -3136,6 +3345,7 @@ class ChassisController:
         data = p.map.to_json()
         todo = [t for t in data.get("targets", [])
                 if t.get("confirmed") and not t.get("shot") and t["kind"] in p.selected
+                and (self.retry_missed or not t.get("missed"))
                 and t["id"] not in getattr(self.shooter, "dry_locked", set())]
         if self.retry_missed and getattr(self.shooter, "armed", False):
             # still standing after max shots: once more, from the best spot, with any trim the
@@ -3216,10 +3426,13 @@ class ChassisController:
         blocked = set()
         driven = set()        # edges the robot really drove through (always open)
         dead_edges = set()    # driven edges it later could not drive again (not used for routes)
+        dead_edge_reopens = 0 # one recovery pass: drift/corner trouble is not a permanent wall
         self._swept_cells = set()
         self._not_cards, self._looked_back, self._guesses = [], set(), []
+        self._candidate_checked = set()
         self._tried_inside, self._tried_from, self._retried = set(), set(), set()
         scan_cache = {}       # (x, y) -> {map dir: ToF mm} (scanned once per cell)
+        direct_scan_dirs = {} # directions physically measured here (not inferred/came-from)
         entry_heading = {}    # (x, y) -> heading when the robot first arrived there
 
         grid_cfg = self.config.get("grid_map", {})
@@ -3262,6 +3475,11 @@ class ChassisController:
                     break
                 self._stop(0.15)
 
+                if not self._camera_ready_for_scan():
+                    print("\n--> กล้องไม่มีสัญญาณสด หยุดเพื่อไม่ให้ข้ามเป้า")
+                    print_summary(x, y)
+                    break
+
                 visited.add((x, y))
                 # side order (explore_order) is relative to how the robot first came into a block
                 entry_heading.setdefault((x, y), travel_dir if travel_dir is not None else heading)
@@ -3271,6 +3489,7 @@ class ChassisController:
 
                 rescanned = False
                 if (x, y) not in scan_cache:
+                    scan_started = time.time()
                     # the way it came in is known open: not looked at again (the block behind
                     # was looked at from inside already)
                     known = {}
@@ -3285,16 +3504,27 @@ class ChassisController:
                         self._log(f"corridor {(x, y)}: walls both sides (Sharp L {corridor[1][0]:.0f} / "
                                   f"R {corridor[1][1]:.0f} cm), way ahead known - camera left + right only")
                     surrounding = self.scan_surroundings_with_gimbal(known=known)
+                    if self.panel is not None:
+                        self.panel.log(f"SCAN_DONE cell={(x, y)} elapsed={time.time() - scan_started:.2f}s "
+                                       f"mode={'sweep' if self.SWEEP_SCAN else 'stops'}")
                     self._last_scan = ((x, y), dict(surrounding))
                     rescanned = True
                     scan_cache[(x, y)] = {(heading + off) % 4: surrounding[rel]
                                           for rel, off in (("front", 0), ("right", 1), ("back", 2), ("left", 3))}
+                    rel_off = {"front": 0, "right": 1, "back": 2, "left": 3}
+                    direct_scan_dirs[(x, y)] = {
+                        (heading + off) % 4 for rel, off in rel_off.items() if rel not in known
+                    }
                     self.recenter(surrounding)          # back to the middle of the block
                 surrounding = {rel: scan_cache[(x, y)][(heading + off) % 4]
                                for rel, off in (("front", 0), ("right", 1), ("back", 2), ("left", 3))}
 
                 if self.panel is not None and rescanned:
                     self.panel.map.mark_scan((x, y), heading, surrounding, FRONT_WALL_MM, SIDE_OPEN_MM)
+                    deferred = getattr(self, "_deferred_motion_scan", None)
+                    self._deferred_motion_scan = None
+                    if deferred is not None:
+                        self._check_motion_sightings(*deferred[:4], limit=deferred[4])
                 self._budget_check(len(visited), total_cells)
                 if self.panel is not None:
                     self._drive_in_hints((x, y), heading)   # cards seen on the way in: the close look aims at them
@@ -3325,10 +3555,13 @@ class ChassisController:
                 if self.panel is not None:
                     self.shoot_here((x, y), heading)
 
-                # time left must cover going to shoot what was found (route planner estimate) -
-                # in "all" mode too: last run explored until 596 s and a confirmed red card was
-                # never shot (no time left for the mop-up)
-                if self.panel is not None and self.panel.round_t0 and self.mop_up:
+                # In full-coverage mode never abandon unseen cells for a long mop-up route.
+                # The live camera already shoots every reachable target as it is found; the
+                # previous policy stopped with 126 s left and 10/36 cells unseen, then spent the
+                # rest revisiting standing cards in a no-ammo practice.  Non-coverage modes may
+                # still reserve time for a target-only finish.
+                if (self.panel is not None and self.panel.round_t0 and self.mop_up and
+                        self.explore_mode != "all"):
                     need = self._shoot_reserve_s()
                     if need and self.panel.remaining() < need:
                         self._log(f"{self.panel.remaining():.0f} s left, shooting what was found needs "
@@ -3343,10 +3576,17 @@ class ChassisController:
                 goal, route = self._next_block((x, y), heading, entry_heading[(x, y)], visited, opened, walls,
                                                blocked, dead_edges, MAX_X, MAX_Y, CELL_SIZE)
                 if goal is None:
+                    unvisited = sorted((cx, cy) for cx in range(MAX_X + 1) for cy in range(MAX_Y + 1)
+                                       if (cx, cy) not in visited)
+                    if (self.explore_mode == "all" and unvisited and dead_edges and
+                            dead_edge_reopens < 1):
+                        self._log(f"reopening {len(dead_edges)} temporarily unsafe open edge(s) "
+                                  "for one centred retry before declaring cells unreachable")
+                        dead_edges.clear()
+                        dead_edge_reopens += 1
+                        continue
                     print("-> [Explore] ไม่มีบล็อกที่ต้องดูเพิ่มแล้ว")
                     if self.explore_mode == "all":
-                        unvisited = sorted((cx, cy) for cx in range(MAX_X + 1) for cy in range(MAX_Y + 1)
-                                           if (cx, cy) not in visited)
                         self._log(f"all {total_cells} cells visited - exploring done" if not unvisited else
                                   f"every reachable cell visited; no safe route to {unvisited}")
                     else:
@@ -3362,9 +3602,16 @@ class ChassisController:
                 moved = False
                 # A corner stop means make room and retry; it does not prove this edge is a wall.
                 retryable_failure = False
-                for attempt in range(3):
+                for attempt in range(2):
                     move_speed = self.CELL_SPEED if known_way or nxt in visited else self.UNKNOWN_SPEED
-                    moved, heading = self.move_cell(d, heading, CELL_SIZE, camera_guard=not known_way,
+                    direct_mm = scan_cache.get((x, y), {}).get(d)
+                    # The stationary map sweep just measured this exact direction as open.
+                    # Do not spend another 1-3 seconds sweeping three almost-identical rays;
+                    # the fresh centre ToF, camera and corner IR remain active throughout.
+                    measured_here = d in direct_scan_dirs.get((x, y), set())
+                    guard = False if known_way else (
+                        "direct" if measured_here and direct_mm and direct_mm > self.wall_mm else True)
+                    moved, heading = self.move_cell(d, heading, CELL_SIZE, camera_guard=guard,
                                                     pos=(x, y), walls=walls, opened=opened, bounds=(MAX_X, MAX_Y),
                                                     speed=move_speed)
                     if moved:
@@ -3373,6 +3620,11 @@ class ChassisController:
                     self._log(f"move {(x, y)} -> {nxt} failed ({self.last_move_note}), retry {attempt + 1}")
                     if not retryable_failure:
                         break
+                    # A fresh ToF/camera contradiction needs a new stationary map scan, not
+                    # repeated driving at the same obstacle with the same cached open edge.
+                    if any(s in (self.last_move_note or "") for s in
+                           ("clearance scan obstacle", "camera ", "ToF obstacle", "no fresh ToF")):
+                        break
                 if not moved:
                     # never pretend: the map would think the robot is somewhere it is not
                     self._log(f"move {(x, y)} -> {nxt} gave up: {self.last_move_note or 'blocked'}")
@@ -3380,7 +3632,12 @@ class ChassisController:
                              act_label=f"BLOCKED ({self.last_move_note or 'blocked'})", c_size=CELL_SIZE)
                     if retryable_failure:
                         dead_edges.add(edge)
-                        self._log(f"edge {(x, y)}->{nxt} left open on the map; temporarily unsafe at a corner")
+                        self._log(f"edge {(x, y)}->{nxt} left open on the map; temporarily unsafe, not a wall")
+                        if any(s in (self.last_move_note or "") for s in
+                               ("clearance scan obstacle", "camera ", "ToF obstacle", "no fresh ToF")):
+                            scan_cache.pop((x, y), None)
+                            direct_scan_dirs.pop((x, y), None)
+                            self._log(f"cached scan at {(x, y)} invalidated; re-scan before routing again")
                     else:
                         blocked.add((x, y, d))
                         if known_way:

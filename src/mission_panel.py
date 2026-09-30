@@ -207,6 +207,7 @@ class CameraWorker:
 
     def _detect_loop(self):
         done_id, last = 0, None
+        target_period = 1.0 / self.detector.processing_fps if self.detector.processing_fps > 0 else 0.0
         while self.running:
             with self.new_frame:
                 while self.running and self.frame_id == done_id:
@@ -253,6 +254,10 @@ class CameraWorker:
                 if last is not None and t1 > last:
                     self.det_fps = self._ema(self.det_fps, 1.0 / (t1 - last))
             last = t1
+            # This is a ceiling, not frame duplication: on this Mac detection naturally runs
+            # around 18-20 fps. On a faster host it avoids burning CPU needed by UI/control.
+            if target_period:
+                time.sleep(max(0.0, target_period - (t1 - t0)))
 
     def latest(self):
         with self.lock:
@@ -387,7 +392,8 @@ class MissionMap:
         """False when a known wall lies between the robot cell and the point."""
         from route_planner import GridGraph
         with self.lock:
-            walls = {e for e in self.walls if isinstance(e, frozenset)}
+            known_open = self.open_edges | self.traversed
+            walls = {e for e in self.walls if isinstance(e, frozenset) and e not in known_open}
         return GridGraph(self.nx, self.ny, walls).line_of_sight(tuple(robot_cell), (x_m, y_m), self.tile)
 
     def in_reach(self, robot_cell, tid, reach=None):
@@ -400,7 +406,8 @@ class MissionMap:
             if t is None or not t["sw"]:
                 return False
             xy = (t["sx"] / t["sw"], t["sy"] / t["sw"])
-            walls = {e for e in self.walls if isinstance(e, frozenset)}
+            known_open = self.open_edges | self.traversed
+            walls = {e for e in self.walls if isinstance(e, frozenset) and e not in known_open}
         return within_reach(GridGraph(self.nx, self.ny, walls), robot_cell, xy, self.tile, reach)
 
     def shot_quality(self, robot_cell, tid):
@@ -472,13 +479,17 @@ class MissionMap:
             return min(0.5, max(0.3, 0.15 + 0.3 * dist_m))
         return min(0.45, max(self.same_card_other_shape_m, 0.15 + 0.2 * dist_m))
 
-    def add_observation(self, color, shape, robot_cell, abs_deg, dist_m, weight=1.0, view_deg=0.0):
+    def add_observation(self, color, shape, robot_cell, abs_deg, dist_m, weight=1.0,
+                        view_deg=0.0, evidence=1):
         """Project a detection onto the map (abs_deg: 0=north, 90=east) and merge it
         with the same card seen before; a card of the same kind further away is a new one.
         view_deg = how far from face-on the card was seen: the shape vote of a slanted
         view counts little, so a face-on look decides square vs rectangle."""
         tx, ty = self.project(robot_cell, abs_deg, dist_m)
-        w = weight / max(dist_m, 0.2)  # closer views are more reliable
+        evidence = max(1, int(evidence))
+        # Independent agreeing still frames are real evidence, not one sighting merely because
+        # they came from the same camera stop. Count them together while projecting only once.
+        w = weight * evidence / max(dist_m, 0.2)  # closer views are more reliable
         kind = kind_of(color, shape)
         # wall unknown (None): the view counts half and never makes the shape "sure"
         cos_v = 0.85 if view_deg is None else max(0.05, math.cos(math.radians(min(abs(view_deg), 89.0))))
@@ -498,7 +509,7 @@ class MissionMap:
             t["sx"] += tx * w
             t["sy"] += ty * w
             t["sw"] += w
-            t["n"] += 1
+            t["n"] += evidence
             need = self.required_observations(shape)
             t["confirmed"] = t["n"] >= need
             votes = t.setdefault("votes", {})
@@ -507,7 +518,7 @@ class MissionMap:
                 t["best_view_deg"] = min(t.get("best_view_deg", 90.0), abs(view_deg))
             elif dist_m < 0.6:   # wall unclear (corner) but close: count agreeing close looks
                 near = t.setdefault("near_unknown", {})
-                near[shape] = near.get(shape, 0) + 1
+                near[shape] = near.get(shape, 0) + evidence
             if dist_m < t["best_dist"]:
                 t["best_dist"] = dist_m
                 t["seen_from"] = tuple(robot_cell)
@@ -771,6 +782,10 @@ class MissionMap:
 
     def to_json(self):
         with self.lock:
+            # A traversed/known-open edge is definitive.  Never persist the same edge as a
+            # wall too (a later noisy ToF scan used to create contradictory round-2 maps).
+            known_open = self.open_edges | self.traversed
+            save_walls = {e for e in self.walls if e not in known_open}
             return {
                 "grid_size": [self.nx, self.ny],
                 "tile_m": self.tile,
@@ -780,7 +795,7 @@ class MissionMap:
                 "path": [list(p) for p in self.path],
                 "visited": sorted([list(v) for v in self.visited]),
                 "walls": sorted([sorted(list(map(list, e))) if isinstance(e, frozenset) else [list(e[0]), e[1]]
-                                 for e in self.walls], key=str),
+                                 for e in save_walls], key=str),
                 "open_edges": sorted([sorted(list(map(list, e))) for e in self.open_edges
                                       if isinstance(e, frozenset)], key=str),
                 "targets": self.target_list(),
@@ -804,6 +819,7 @@ class MissionMap:
             driven = driven_edges(data)
             self.walls -= driven
             self.open_edges |= driven
+            self.walls -= self.open_edges
             self.known = {}
             for t in data.get("targets", []):
                 if t.get("confirmed", True):
@@ -1265,7 +1281,8 @@ class MissionPanel:
     def update_robot(self, cell, heading, gimbal_abs=None, visited=None):
         self.map.set_robot(cell, heading, gimbal_abs, visited)
 
-    def observe_targets(self, robot_cell, abs_deg, tof_mm=None, settle_ts=None, frames=3):
+    def observe_targets(self, robot_cell, abs_deg, tof_mm=None, settle_ts=None, frames=3,
+                        min_hits=None):
         """Look at a few fresh frames and put every real target on the map.
 
         A target counts only when it is seen in most of `frames` frames, is in
@@ -1277,7 +1294,22 @@ class MissionPanel:
         seen = {}                                      # kind -> [detections]
         guesses = {}                                   # colour -> [detections that may be a card]
         for _ in range(frames):
-            _, dets = self.worker.wait_fresh(after, timeout=0.6)
+            if not self.checkpoint():
+                self.last_guesses = []
+                self.last_single = []
+                return []
+            # Poll in short slices so the UI STOP button interrupts a confirmation burst
+            # promptly instead of waiting through every camera timeout.
+            deadline = time.time() + 0.6
+            dets = []
+            while time.time() < deadline and self.checkpoint():
+                _, dets = self.worker.wait_fresh(after, timeout=min(0.10, deadline - time.time()))
+                if self.worker.det_ts > after:
+                    break
+            if not self.checkpoint():
+                self.last_guesses = []
+                self.last_single = []
+                return []
             after = time.time()
             for d in dets:
                 if d.is_card and d.distance_m is not None:  # every card goes on the map
@@ -1296,9 +1328,10 @@ class MissionPanel:
                     guesses.setdefault(d.color, []).append(d)
         # maybe-cards (cut by the picture edge, odd outline): seen in most frames -> a suspect
         # the robot checks by re-aiming or from the next block (never shot as they are)
+        need = max(1, int(min_hits)) if min_hits is not None else frames // 2 + 1
         self.last_guesses = []
         for color, ds in guesses.items():
-            if len(ds) >= frames // 2 + 1:
+            if len(ds) >= need:
                 ds.sort(key=lambda d: d.area)
                 g = ds[len(ds) // 2]
                 self.last_guesses.append({"color": color, "shape": g.guess, "bearing": g.bearing_deg,
@@ -1316,7 +1349,6 @@ class MissionPanel:
                     cur = []
                 cur.append(d)
             groups.append((kind, cur))
-        need = frames // 2 + 1
         found = []
         tof_m = tof_mm / 1000.0 if tof_mm and 60 < tof_mm < 8000 else None
         # a card seen in only ONE frame is not thrown away: it is kept as a "seen once" so the
@@ -1327,7 +1359,8 @@ class MissionPanel:
             if len(ds) < need:
                 d1 = ds[0]
                 self.last_single.append({"kind": kind, "color": d1.color, "bearing": d1.bearing_deg,
-                                         "elevation": d1.elevation_deg, "abs_deg": (abs_deg + d1.bearing_deg) % 360})
+                                         "elevation": d1.elevation_deg, "distance": d1.distance_m,
+                                         "abs_deg": (abs_deg + d1.bearing_deg) % 360})
                 continue
             ds.sort(key=lambda d: d.distance_m)
             d = ds[len(ds) // 2]                       # median by distance
@@ -1399,8 +1432,10 @@ class MissionPanel:
                         d.in_range = d.is_target and dist <= self.detector.max_shoot_m
                         x_m, y_m, view = xf, yf, view_f
             d.extra["view_deg"] = None if view is None else round(view, 1)
-            v = self.map.add_observation(d.color, d.shape, robot_cell, abs_deg + d.bearing_deg, dist,
-                                         view_deg=view)
+            v = self.map.add_observation(
+                d.color, d.shape, robot_cell, abs_deg + d.bearing_deg, dist,
+                view_deg=view, evidence=len(ds),
+            )
             if self.map._log_shape:
                 old, new = self.map._log_shape
                 self.map._log_shape = None
@@ -1409,10 +1444,19 @@ class MissionPanel:
                 drop, keep = self.map.merged_log.pop(0)
                 self.log(f"{drop} is the same card as {keep} - merged")
             d.target_id = v["id"]
+            # A settled MAP_SCAN already supplied the required multi-frame evidence.
+            # Do not make verify_sweep rotate around the same cell again for a target
+            # that is confirmed and fully visible; unresolved/partial sightings remain
+            # unverified and still receive the safety close-look path.
+            if v.get("confirmed") and not d.extra.get("clipped") and not d.guess:
+                with self.map.lock:
+                    if v["id"] in self.map.targets:
+                        self.map.targets[v["id"]]["verified"] = True
             tag = "" if d.is_target else " (not selected)"
             if v["observations"] == 1:
                 self.log(f"seen {v['id']} near cell {tuple(v['cell'])} ({dist:.2f} m){tag}")
-            elif v["confirmed"] and v["observations"] == self.map.required_observations(v["shape"]):
+            elif (v["confirmed"] and
+                  v["observations"] - len(ds) < self.map.required_observations(v["shape"])):
                 self.log(f"FOUND {v['id']} at cell {tuple(v['cell'])}{tag}")
             found.append(d)
         return found
@@ -1455,7 +1499,7 @@ class MissionPanel:
         """A mapped card that is selected and not hit yet - and whose shape is sure (seen
         face-on once), unless every square / rect of that colour is selected anyway."""
         t = self.map.targets.get(tid)
-        if not t or not t.get("confirmed") or t["kind"] not in self.selected or t["shot"]:
+        if not t or not t.get("confirmed") or t["kind"] not in self.selected or t["shot"] or t.get("missed"):
             return False
         if self.map.shape_sure(tid):
             return True
@@ -1851,6 +1895,7 @@ class MissionPanel:
                 rows.append(("r1", k))
         rows.sort(key=lambda r: (r[1]["kind"] not in self.selected, r[1]["id"]))
         hits = dict(self.splits())
+        dry_locked = getattr(getattr(self.controller, "shooter", None), "dry_locked", set())
         if not rows:
             sel = ", ".join(kind_label(k) for k in sorted(self.selected)) or "none - pick in Select"
             put(canvas, "no cards found yet", (mx + 12, y0 + 20), 0.45, MUTED)
@@ -1868,6 +1913,8 @@ class MissionPanel:
                 status, col = f"round {self.round_no - 1}", MUTED
             elif v["shot"]:
                 status, col = (f"HIT {self.fmt(hits[v['id']])}" if v["id"] in hits else "HIT"), OK
+            elif v["id"] in dry_locked:
+                status, col = "DRY LOCKED", OK
             elif not v["confirmed"]:
                 status, col = "checking", AMBER
             elif chosen:

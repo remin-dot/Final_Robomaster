@@ -23,6 +23,14 @@ class FakeIR:
     def latest(self):
         return self.distances
 
+    def usable(self, _side):
+        return True
+
+
+class RecoveringAdaptor:
+    def get_adc(self, id, port):
+        return 420
+
 
 class CornerIRSafetyTests(unittest.TestCase):
     def test_active_low_io_switches_between_clear_and_wall(self):
@@ -46,6 +54,17 @@ class CornerIRSafetyTests(unittest.TestCase):
         self.assertFalse(sensors.corner_near("right"))
         sensors.corner_sig["right"].update(590, 0)
         self.assertTrue(sensors.corner_near("right"))
+
+    def test_side_sensor_is_reprobed_after_temporary_timeout(self):
+        sensors = SharpIR(RecoveringAdaptor(), {
+            "sharp_ir": {"left_ports": [[1, 2]], "right_ports": [[2, 1]], "retry_s": 0.5},
+            "ir_corner": {"enabled": False},
+        }, log=lambda _message: None)
+        sensors.port = {"left": None, "right": None}
+        sensors._retry_at = {"left": 0.0, "right": 0.0}
+        sensors._recover_missing(1.0)
+        self.assertEqual(sensors.port["left"], (1, 2))
+        self.assertEqual(sensors.port["right"], (2, 1))
 
     def test_one_corner_is_an_emergency_without_other_sensor_confirmation(self):
         controller = ChassisController.__new__(ChassisController)
@@ -72,7 +91,18 @@ class CornerIRSafetyTests(unittest.TestCase):
         controller.last_move_note = "front-left IR emergency stop at 0.17 m"
         self.assertTrue(controller._retryable_move_failure())
         controller.last_move_note = "clearance scan obstacle 0.32 m ahead"
-        self.assertFalse(controller._retryable_move_failure())
+        self.assertTrue(controller._retryable_move_failure())
+
+    def test_corner_room_never_reverses_when_both_sides_are_blocked(self):
+        controller = ChassisController.__new__(ChassisController)
+        controller.ir = FakeIR(left=True, right=True, left_cm=8.0, right_cm=8.0)
+        controller.ir.usable = lambda _side: True
+        controller.TURN_CLEAR_SIDE_CM = 12.0
+        controller._log = lambda _message: None
+        nudges = []
+        controller.nudge = lambda angle, distance: nudges.append((angle, distance))
+        self.assertFalse(controller._make_corner_room(("left", "right")))
+        self.assertEqual(nudges, [])
 
     def test_single_corner_warns_before_persistent_stop(self):
         controller = ChassisController.__new__(ChassisController)

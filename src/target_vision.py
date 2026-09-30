@@ -186,7 +186,7 @@ SHAPE_LABEL = {
     "unknown": "?",
 }
 
-# detection runs on a frame resized to this width (speed; keeps 30 fps)
+# Default only; the live value comes from vision.processing_width.
 PROC_WIDTH = 640
 
 
@@ -362,6 +362,7 @@ class TargetDetector:
             kind_of(c, s) for c, s in self.catalogue.items()}
         self.min_solidity = float(vis.get("min_solidity", 0.85))
         self.guess_min_solidity = float(vis.get("guess_min_solidity", 0.75))  # partial / odd card blobs
+        self.guess_min_area_factor = float(vis.get("guess_min_area_factor", 2.0))
         self.static_spots = []          # (colour, bearing, elevation) of blobs fixed in the picture
         self.close_mode = False         # set during a close look (camera down inside the block)
         self.close_wall_top_deg = None  # ... elevation of the top of the wall it looks at (from the ToF)
@@ -395,16 +396,24 @@ class TargetDetector:
         self.max_ring_fill = float(vis.get("max_ring_fill", 0.25))
 
         self.hfov_deg = float(vis.get("hfov_deg", 96.0))
+        self.processing_width = max(320, int(vis.get("processing_width", PROC_WIDTH)))
+        self.processing_fps = max(0.0, float(vis.get("processing_fps", 0.0)))
         self.bottom_ignore = float(vis.get("bottom_ignore_ratio", 0.15))
         self.top_ignore = float(vis.get("top_ignore_ratio", 0.0))
         self.max_area_ratio = float(vis.get("max_area_ratio", 0.25))
-        self.min_area_px = float(vis.get("min_area_px", 80))  # at the 640 px processing width
+        # Absolute processing-frame area. At the configured 512 px width, the smallest
+        # expected 1.2 m card is still about 160 px, leaving 2x margin above the default.
+        # Scaling this down admitted many tiny room contours and halved detector throughput.
+        self.min_area_px = float(vis.get("min_area_px", 80))
         # --- ignore the room: everything above the arena's white walls / above the horizon
         self.ignore_above_wall = bool(vis.get("ignore_above_wall", True))
         self.wall_s_max = int(vis.get("wall_s_max", 60))          # white / grey foam: low saturation
         self.wall_v_min = int(vis.get("wall_v_min", 120))         # ... and bright
         self.wall_margin = float(vis.get("wall_margin_frac", 0.03))  # keep this much (of the height) above the line
         self.wall_max_gap = float(vis.get("wall_max_gap_frac", 0.25))  # non-white gap still inside the wall band
+        self.wall_edge_max_dip = float(vis.get("wall_edge_max_dip_frac", 0.035))
+        self.wall_edge_max_below_horizon = float(
+            vis.get("wall_edge_max_below_horizon_frac", 0.08))
         # cards hang lower than the camera, so their centre is below the horizon; the room is above it
         self.max_elevation_deg = vis.get("max_elevation_deg", 1.5)  # None / off = no horizon rule
         self.gimbal_pitch_deg = 0.0     # live gimbal pitch (set by the chassis) - moves the horizon
@@ -445,7 +454,10 @@ class TargetDetector:
             return m
         if self.color_model == "veto":
             bg = self._lut_id("background")
-            if bg is not None:
+            # Green cards in the latest run were visible to HSV while turning, then
+            # disappeared only in the settled/LUT pass.  Room-background veto is useful
+            # for beige/yellow and red wood, but unsafe for green when lighting changes.
+            if bg is not None and name != "green":
                 m = m.copy()
                 m[cls == bg] = 0          # looks like the sampled background (beige, wood, walls)
             return m
@@ -666,7 +678,8 @@ class TargetDetector:
         if frame is None:
             return []
         H, W = frame.shape[:2]
-        scale = PROC_WIDTH / float(W) if W > PROC_WIDTH else 1.0
+        proc_width = self.processing_width
+        scale = proc_width / float(W) if W > proc_width else 1.0
         small = cv2.resize(frame, (int(W * scale), int(H * scale)), interpolation=cv2.INTER_AREA) if scale < 1.0 else frame
         h, w = small.shape[:2]
 
@@ -674,7 +687,10 @@ class TargetDetector:
             small = self._balance_to_walls(small)
         blurred = cv2.GaussianBlur(small, (5, 5), 0)
         hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
-        self._cls = self.class_map(blurred)
+        # HSV mode deliberately ignores the learned background LUT.  Besides avoiding a
+        # sampled green card being vetoed as room background, this saves a full-frame LUT
+        # lookup on every detector frame.
+        self._cls = None if self.color_model == "hsv" else self.class_map(blurred)
         y_top = int(h * self.top_ignore)
         y_bot = int(h * (1.0 - self.bottom_ignore))  # blaster barrel sits at the bottom
 
@@ -825,7 +841,7 @@ class TargetDetector:
                 # on white wall - not any sliver of colour at the picture edge
                 vis_h = sh * inv
                 maybe = (not is_card and name in self.card_colors and ring_fill <= self.max_ring_fill
-                         and solidity >= self.guess_min_solidity and a >= 4 * min_area_small
+                         and solidity >= self.guess_min_solidity and a >= self.guess_min_area_factor * min_area_small
                          and neutral >= self.min_neutral_guess and vis_h >= self.guess_min_h_frac * H)
                 if clipped:
                     ok_guess = maybe
@@ -873,13 +889,14 @@ class TargetDetector:
         if frame is None:
             return []
         H, W = frame.shape[:2]
-        scale = PROC_WIDTH / float(W) if W > PROC_WIDTH else 1.0
+        proc_width = self.processing_width
+        scale = proc_width / float(W) if W > proc_width else 1.0
         small = cv2.resize(frame, (int(W * scale), int(H * scale)), interpolation=cv2.INTER_AREA) if scale < 1.0 else frame
         h, w = small.shape[:2]
         if self.white_balance:
             small = self._balance_to_walls(small)
         hsv = cv2.cvtColor(small, cv2.COLOR_BGR2HSV)
-        cls = self.class_map(small)
+        cls = None if self.color_model == "hsv" else self.class_map(small)
         bg_id = self._lut_id("background")
         bx = abs(blur_px) * scale
         by = abs(blur_dy_px) * scale
@@ -906,7 +923,7 @@ class TargetDetector:
                 mask = self._hsv_mask(hsv, name)
             finally:
                 self.hsv[name] = saved
-            if cls is not None and bg_id is not None:
+            if cls is not None and bg_id is not None and name != "green":
                 mask[cls == bg_id] = 0            # sampled as background (beige / wood / wall)
             mask[:y_top, :] = 0
             mask[y_bot:, :] = 0
@@ -1026,6 +1043,11 @@ class TargetDetector:
                 if g1 - g0 > 2 and hz is not None and g0 < hz and not self._hole_in_wall(white, c, g0, g1):
                     break                              # not a card in the wall: the room seen past it
                 t = starts[j]
+            # The foam wall is taller than the camera, so its top cannot be far below the
+            # world horizon. A low "edge" is the white floor interrupted by a chair/table
+            # leg; accepting it makes the mask trace the obstacle and cut through targets.
+            if hz is not None and t > hz + rows * self.wall_edge_max_below_horizon:
+                continue
             top[c] = t
         half = max(3, cols // 24)
         smooth = np.full(cols, np.nan)
@@ -1041,6 +1063,19 @@ class TargetDetector:
         out = np.interp(np.arange(w), xs[valid], smooth[valid] * h / rows)
         nearest = np.interp(np.arange(w), xs, valid.astype(float))
         out[nearest < 0.5] = np.nan
+        # A coloured card interrupts the white pixels.  It must be treated as a hole in one
+        # continuous foam edge, never as permission for the boundary to dive down across the
+        # card and mask it.  Clamp isolated downward notches to the neighbouring edge while
+        # preserving the broad perspective/slope of the wall.
+        radius = max(5, w // 24)
+        local = np.full(w, np.nan)
+        for c in range(w):
+            win = out[max(0, c - radius):min(w, c + radius + 1)]
+            ok = ~np.isnan(win)
+            if ok.any():
+                local[c] = np.median(win[ok])
+        ok = ~np.isnan(out) & ~np.isnan(local)
+        out[ok] = np.minimum(out[ok], local[ok] + self.wall_edge_max_dip * h)
         return out
 
     @staticmethod
@@ -1211,16 +1246,13 @@ def draw_detections(frame, detections, show_all=True, alpha=0.45):
 
 
 def draw_ignored(frame, line, color=(255, 200, 0)):
-    """Dim the part of the picture that detection ignores (above the arena walls /
-    the horizon) and draw its edge. `line` = per-column y (TargetDetector.last_ignore_line)."""
+    """Draw only the foam/horizon edge used by detection; never cover the camera image."""
     if line is None:
         return frame
     H, W = frame.shape[:2]
     if len(line) != W:
         line = np.interp(np.arange(W), np.linspace(0, W - 1, len(line)), line)
     ys = np.clip(np.nan_to_num(line, nan=-1).astype(int), -1, H - 1)
-    above = np.arange(H)[:, None] <= ys[None, :]
-    frame[above] = (frame[above] * 0.45 + np.array((60, 50, 40)) * 0.55).astype(np.uint8)
     pts = np.stack([np.arange(W), ys], axis=1)[ys >= 0]
     if len(pts) > 1:
         cv2.polylines(frame, [pts.astype(np.int32)], False, color, 2, cv2.LINE_AA)

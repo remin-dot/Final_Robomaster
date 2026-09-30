@@ -1,112 +1,123 @@
-10:13:25 Round 1 started (10:00 limit)
-10:13:25 BLASTER OFF (dry run): it aims but fires NOTHING - tick 'Blaster armed' in Actions
-10:13:26 recording a frame every 1.0 s -> data/raw/run1/frames_101326
-10:13:34 WHEELS NOT ANSWERING while driving: drive commands for 1.2 s, wheels 0 rpm, odometry + yaw frozen - trying to wake the chassis
-10:13:35 chassis answers again - carrying on
-10:13:48 next: (1, 1) (2 moves) - most still unseen per second
-10:13:49 front-left IR triggered while turning - emergency stop
-10:13:49 front-left IR: shift right before retry
-10:14:07 route plan: (1, 0) before (2, 1) - 7 blocks to see, fewer moves in total that way
-10:14:11 camera says wall 0.21 m but ToF 797 mm - trusting the ToF
-10:14:27 route plan: (2, 1) before (3, 0) - 6 blocks to see, fewer moves in total that way
-10:14:33 EMERGENCY STOP: right wall 5 cm, closing 27 cm/s
-10:14:36 recentre: slide 6 cm forward
-10:14:37 next: (1, 2) (2 moves) - most still unseen per second
-10:14:38 front-right IR triggered while turning - emergency stop
-10:14:38 front-right IR: shift left before retry
-10:14:57 recentre: slide 10 cm left
-10:15:06 route plan: (0, 3) before (1, 4) - 6 blocks to see, fewer moves in total that way
-10:15:32 camera says wall 0.33 m but ToF 865 mm - trusting the ToF
-10:15:45 EMERGENCY STOP: right wall 6 cm, closing 16 cm/s
-10:15:51 front-left IR triggered while turning - emergency stop
-10:15:51 front-left IR: shift right before retry
-10:15:55 camera says wall 0.40 m but ToF 866 mm - trusting the ToF
-10:16:01 next: (2, 3) (4 moves) - most still unseen per second
-10:16:09 next: (2, 3) (3 moves) - most still unseen per second
-10:16:09 too close to turn (Sharp L 16 / R 30 cm, front near) - making room first
-10:16:13 front-right IR caution: slowing and steering away
-10:16:16 next: (2, 3) (2 moves) - most still unseen per second
-10:16:31 recentre: slide 10 cm forward
-10:16:32 route plan: (2, 4) before (2, 2) - 4 blocks to see, fewer moves in total that way
-10:16:32 front-left IR triggered while turning - emergency stop
-10:16:32 front-left IR: shift right before retry
-10:16:34 front-right IR triggered while turning - emergency stop
-10:16:34 front-right IR: shift left before retry
-10:16:44 recentre: slide 9 cm left
-10:16:54 recentre: slide 10 cm forward
-10:16:59 camera says wall 0.25 m but ToF 886 mm - trusting the ToF
-10:17:01 EMERGENCY STOP: right wall 6 cm, closing 29 cm/s
-10:17:05 next: (3, 4) (3 moves) - most still unseen per second
-10:17:12 EMERGENCY STOP: right wall 8 cm, closing 17 cm/s
-10:17:15 next: (3, 4) (2 moves) - most still unseen per second
-10:17:15 too close to turn (Sharp L 30 / R 12 cm, front near) - making room first
-10:17:20 EMERGENCY STOP: left wall 7 cm, closing 36 cm/s
-10:17:21 EMERGENCY STOP: right wall 5 cm
-10:17:27 camera says wall 0.25 m but ToF 1648 mm - trusting the ToF
-10:17:29 EMERGENCY STOP: right wall 5 cm, closing 30 cm/s
-10:17:31 corridor (3, 4): walls both sides (Sharp L 14 / R 11 cm), way ahead known - camera left + right only
-10:17:36 camera says wall 0.22 m but ToF 1545 mm - trusting the ToF
-10:17:38 EMERGENCY STOP: right wall 7 cm, closing 16 cm/s
-10:17:42 route plan: (4, 3) before (5, 4) - 6 blocks to see, fewer moves in total that way
-10:17:47 camera says wall 0.31 m but ToF 1714 mm - trusting the ToF
-10:17:49 EMERGENCY STOP: right wall 8 cm, closing 31 cm/s
-10:18:01 route plan: (3, 2) before (4, 1) - 8 blocks to see, fewer moves in total that way
-10:18:13 doorway post / wall end 0.39 m at the right of the way - sliding 5 cm away, checking again
-10:18:21 route plan: (3, 1) before (3, 3) - 8 blocks to see, fewer moves in total that way
-10:18:21 next: (3, 1) (2 moves) - most still unseen per second
-10:18:27 route plan: (3, 1) before (3, 3) - 8 blocks to see, fewer moves in total that way
-10:18:31 doorway post / wall end 0.31 m at the right of the way - sliding 5 cm away, checking again
-10:18:36 EMERGENCY STOP: right wall 7 cm, closing 18 cm/s
-10:18:37 corridor (3, 1): walls both sides (Sharp L 20 / R 10 cm), way ahead known - camera left + right only
-10:18:57 recentre: slide 10 cm forward
-10:18:58 too close to turn (Sharp L 30 / R 12 cm, front clear) - making room first
-10:18:59 front-right IR triggered while turning - emergency stop
-10:18:59 front-right IR: shift left before retry
-10:19:26 camera says wall 0.20 m but ToF 876 mm - trusting the ToF
-10:19:31 next: (5, 2) (4 moves) - most still unseen per second
-10:19:32 front-right IR triggered while turning - emergency stop
-10:19:32 front-right IR: shift left before retry
-10:19:33 front-left IR triggered while turning - emergency stop
-10:19:33 front-left IR: shift right before retry
-10:19:34 front-left IR triggered while turning - emergency stop
-10:19:34 front-left IR: shift right before retry
-10:19:34 turn failed: still -115 deg off
-10:19:34 move (5, 0) -> (5, 1) failed (turn stopped by safety guard), retry 1
-10:19:35 too close to turn (Sharp L 30 / R 13 cm, front near) - making room first
-10:19:42 next: (5, 2) (3 moves) - most still unseen per second
-10:19:42 too close to turn (Sharp L 30 / R 14 cm, front near) - making room first
-10:19:49 next: (5, 2) (2 moves) - most still unseen per second
-10:19:49 too close to turn (Sharp L 30 / R 27 cm, front near) - making room first
-10:19:55 front-right IR caution: slowing and steering away
-10:20:02 camera says wall 0.34 m but ToF 728 mm - trusting the ToF
-10:20:03 EMERGENCY STOP: right wall 8 cm, closing 19 cm/s
-10:20:05 arrived 73% in, wall 217 mm ahead = far wall of this block
-10:20:07 recentre: slide 6 cm forward
-10:20:08 next: (3, 3) (3 moves) - most still unseen per second
-10:20:09 front-right IR triggered while turning - emergency stop
-10:20:09 front-right IR: shift left before retry
-10:20:10 front-left IR triggered while turning - emergency stop
-10:20:10 front-left IR: shift right before retry
-10:20:11 front-right IR triggered while turning - emergency stop
-10:20:11 front-right IR: shift left before retry
-10:20:11 turn failed: still -135 deg off
-10:20:11 move (5, 2) -> (4, 2) failed (turn stopped by safety guard), retry 1
-10:20:11 too close to turn (Sharp L 11 / R 30 cm, front near) - making room first
-10:20:19 next: (3, 3) (2 moves) - most still unseen per second
-10:20:31 next: (4, 5) (5 moves) - most still unseen per second
-10:20:38 next: (4, 5) (4 moves) - most still unseen per second
-10:20:44 next: (4, 5) (3 moves) - most still unseen per second
-10:20:49 next: (4, 5) (2 moves) - most still unseen per second
-10:20:59 recentre: slide 10 cm forward
-10:21:01 front-left IR triggered while turning - emergency stop
-10:21:01 front-left IR: shift right before retry
-10:21:06 camera says wall 0.19 m but ToF 790 mm - trusting the ToF
-10:21:08 arrived 77% in, wall 280 mm ahead = far wall of this block
-10:21:29 all 36 cells visited - exploring done
-10:21:30 Round 1 saved -> data/raw/run1/round1_map.png
-10:21:30 robot released: wheels stopped, wheel speeds 0, gimbal stopped, free mode, gimbal asleep, LEDs idle - carry it to the start and straighten the gimbal by hand
-10:21:38 vision: auto label: circle +16, rect_wide +2, rect_tall +4, none +4, unsure +38 (473 new frames)
-10:21:39 vision: clean: 507 examples, 14 suspect: has corners like a rectangle 2, near-copy of another example 12
-10:21:39 vision: clean: moved 14 to _quarantine/ (restore: roi_clean.py --restore)
-10:21:41 vision: cross-validation (near-copies kept together): 97.0 %  -  circle 106/106, square 107/108 (as {'circle': 1}), rect_wide 149/154 (as {'none': 5}), rect_tall 114/116 (as {'square': 1, 'none': 1}), none 2/9 (as {'circle': 2, 'rect_wide': 2, 'rect_tall': 3})
-10:21:45 vision: auto train: saved (98 % cross-check, 493 clean examples)
+06:19:37 Round 2 started (05:00 limit)
+06:19:40 red circle was not found in round 1 - skipped
+06:19:40 red rect_wide was not found in round 1 - skipped
+06:19:41 route: Dijkstra (turns) - 10 moves, 5 turns, ~68 s  |  greedy nearest 85s  greedy cover 82s  BFS state search 85s  Dijkstra (turns) 68s
+06:19:41 too close to turn (Sharp L 14 / R 30 cm, front clear) - making room first
+06:19:47 EMERGENCY STOP: left wall 11 cm, closing 31 cm/s
+06:19:52 LOOK cell=(3, 5) chassis=270deg gimbal_rel=+104deg gimbal_abs=14deg pitch=-10deg reason=MAP_SCAN
+06:19:54 FOUND yellow circle at cell (3, 5)
+06:19:54 yellow candidate seen briefly - still-frame check: confirmed
+06:19:55 LOOK cell=(3, 5) chassis=270deg gimbal_rel=+89deg gimbal_abs=359deg pitch=-10deg reason=MAP_SCAN
+06:19:56 LOOK cell=(3, 5) chassis=270deg gimbal_rel=+119deg gimbal_abs=29deg pitch=-10deg reason=MAP_SCAN
+06:19:57 LOOK cell=(3, 5) chassis=270deg gimbal_rel=+74deg gimbal_abs=344deg pitch=-10deg reason=MAP_SCAN
+06:19:58 LOOK cell=(3, 5) chassis=270deg gimbal_rel=+134deg gimbal_abs=44deg pitch=-10deg reason=MAP_SCAN
+06:19:59 yellow circle not hit from (3, 5), trying another spot
+06:20:01 centre check ended with lateral error +0.0 cm; continuing slowly with collision guards
+06:20:06 front-right IR caution: slowing and steering away
+06:20:08 LOOK cell=(3, 4) chassis=180deg gimbal_rel=-177deg gimbal_abs=3deg pitch=+0deg reason=MAP_SCAN
+06:20:10 FIRE 1 -> yellow circle at 0.85 m
+06:20:10 HIT yellow circle: centred locked fire accepted (no-ammo practice mode)
+06:20:12 route: DFS branch&bound - 7 moves, 4 turns, ~54 s  |  greedy nearest 72s  greedy cover 69s  DFS branch&bound 54s  BFS state search 72s  Dijkstra (turns) 54s
+06:20:13 centre check ended with lateral error -1.5 cm; continuing slowly with collision guards
+06:20:13 too close to turn (Sharp L 30 / R 13 cm, front near) - making room first
+06:20:27 LOOK cell=(4, 3) chassis=180deg gimbal_rel=-137deg gimbal_abs=43deg pitch=+0deg reason=MAP_SCAN
+06:20:28 LOOK cell=(4, 3) chassis=180deg gimbal_rel=-152deg gimbal_abs=28deg pitch=+0deg reason=MAP_SCAN
+06:20:29 LOOK cell=(4, 3) chassis=180deg gimbal_rel=-122deg gimbal_abs=58deg pitch=+0deg reason=MAP_SCAN
+06:20:30 LOOK cell=(4, 3) chassis=180deg gimbal_rel=-167deg gimbal_abs=13deg pitch=+0deg reason=MAP_SCAN
+06:20:31 LOOK cell=(4, 3) chassis=180deg gimbal_rel=-107deg gimbal_abs=73deg pitch=+0deg reason=MAP_SCAN
+06:20:32 yellow square not hit from (4, 3), trying another spot
+06:20:32 LOOK cell=(4, 3) chassis=180deg gimbal_rel=-74deg gimbal_abs=106deg pitch=-10deg reason=MAP_SCAN
+06:20:34 green candidate seen briefly - still-frame check: nothing there
+06:20:34 LOOK cell=(4, 3) chassis=180deg gimbal_rel=-89deg gimbal_abs=91deg pitch=-10deg reason=MAP_SCAN
+06:20:35 LOOK cell=(4, 3) chassis=180deg gimbal_rel=-59deg gimbal_abs=121deg pitch=-10deg reason=MAP_SCAN
+06:20:36 FOUND blue rect_wide at cell (4, 2)
+06:20:36 LOOK cell=(4, 3) chassis=180deg gimbal_rel=-104deg gimbal_abs=76deg pitch=-10deg reason=MAP_SCAN
+06:20:37 LOOK cell=(4, 3) chassis=180deg gimbal_rel=-44deg gimbal_abs=136deg pitch=-10deg reason=MAP_SCAN
+06:20:38 green rect_tall not hit from (4, 3), trying another spot
+06:20:38 LOOK cell=(4, 3) chassis=180deg gimbal_rel=-35deg gimbal_abs=145deg pitch=+0deg reason=MAP_SCAN
+06:20:39 blue rect_wide is really blue square (seen face-on)
+06:20:39 LOOK cell=(4, 3) chassis=180deg gimbal_rel=-50deg gimbal_abs=130deg pitch=+0deg reason=MAP_SCAN
+06:20:40 blue square is really blue rect_wide (seen face-on)
+06:20:40 LOOK cell=(4, 3) chassis=180deg gimbal_rel=-20deg gimbal_abs=160deg pitch=+0deg reason=MAP_SCAN
+06:20:41 LOOK cell=(4, 3) chassis=180deg gimbal_rel=-65deg gimbal_abs=115deg pitch=+0deg reason=MAP_SCAN
+06:20:42 LOOK cell=(4, 3) chassis=180deg gimbal_rel=-5deg gimbal_abs=175deg pitch=+0deg reason=MAP_SCAN
+06:20:43 blue rect_wide is really blue square (seen face-on)
+06:20:43 blue rect_wide #2 not hit from (4, 3), trying another spot
+06:20:44 route: Dijkstra (turns) - 9 moves, 5 turns, ~63 s  |  greedy nearest 78s  greedy cover 79s  DFS branch&bound 65s  BFS state search 78s  Dijkstra (turns) 63s
+06:20:44 centre check ended with lateral error +0.0 cm; continuing slowly with collision guards
+06:20:47 front-right IR triggered while turning - emergency stop
+06:20:47 front-right IR: shift left before retry
+06:20:53 LOOK cell=(4, 4) chassis=0deg gimbal_rel=+96deg gimbal_abs=96deg pitch=+0deg reason=MAP_SCAN
+06:20:53 ignored yellow tall rect: behind a mapped wall
+06:20:54 LOOK cell=(4, 4) chassis=0deg gimbal_rel=+81deg gimbal_abs=81deg pitch=+0deg reason=MAP_SCAN
+06:20:56 blue square is really blue rect_wide (seen face-on)
+06:20:56 yellow candidate seen briefly - still-frame check: nothing there
+06:20:57 lost blue rect_wide while aiming
+06:20:58 LOOK cell=(4, 4) chassis=0deg gimbal_rel=+111deg gimbal_abs=111deg pitch=+0deg reason=MAP_SCAN
+06:20:59 LOOK cell=(4, 4) chassis=0deg gimbal_rel=+66deg gimbal_abs=66deg pitch=+0deg reason=MAP_SCAN
+06:21:00 LOOK cell=(4, 4) chassis=0deg gimbal_rel=+126deg gimbal_abs=126deg pitch=+0deg reason=MAP_SCAN
+06:21:01 ignored yellow tall rect: behind a mapped wall
+06:21:01 yellow square not hit from (4, 4), trying another spot
+06:21:04 camera says wall 0.26 m but ToF 795 mm - trusting the ToF
+06:21:08 LOOK cell=(4, 5) chassis=0deg gimbal_rel=+142deg gimbal_abs=142deg pitch=+0deg reason=MAP_SCAN
+06:21:09 ignored yellow square: behind a mapped wall
+06:21:09 LOOK cell=(4, 5) chassis=0deg gimbal_rel=+127deg gimbal_abs=127deg pitch=+0deg reason=MAP_SCAN
+06:21:10 LOOK cell=(4, 5) chassis=0deg gimbal_rel=+157deg gimbal_abs=157deg pitch=+0deg reason=MAP_SCAN
+06:21:12 LOOK cell=(4, 5) chassis=0deg gimbal_rel=+112deg gimbal_abs=112deg pitch=+0deg reason=MAP_SCAN
+06:21:13 LOOK cell=(4, 5) chassis=0deg gimbal_rel=+172deg gimbal_abs=172deg pitch=+0deg reason=MAP_SCAN
+06:21:13 FOUND yellow square at cell (5, 4)
+06:21:13 yellow square not hit from (4, 5), trying another spot
+06:21:13 giving up on yellow square
+06:21:15 centre check ended with lateral error -10.7 cm; continuing slowly with collision guards
+06:21:15 too close to turn (Sharp L 26 / R 30 cm, front near) - making room first
+06:21:26 front-right IR caution: slowing and steering away
+06:21:33 front-right IR caution: slowing and steering away
+06:21:34 front-right IR triggered at ~7 cm while moving - emergency stop
+06:21:39 front-right IR: shift left before retry
+06:21:44 LOOK cell=(4, 1) chassis=180deg gimbal_rel=-49deg gimbal_abs=131deg pitch=+0deg reason=MAP_SCAN
+06:21:45 FOUND red rect_tall at cell (5, 1)
+06:21:46 FOUND yellow square #2 at cell (5, 0)
+06:21:46 yellow square seen briefly - still-frame check: confirmed
+06:21:48 FIRE 1 -> red tall rect at 0.90 m
+06:21:48 HIT red tall rect: centred locked fire accepted (no-ammo practice mode)
+06:21:49 LOOK cell=(4, 1) chassis=180deg gimbal_rel=-64deg gimbal_abs=116deg pitch=+0deg reason=MAP_SCAN
+06:21:50 LOOK cell=(4, 1) chassis=180deg gimbal_rel=-34deg gimbal_abs=146deg pitch=+0deg reason=MAP_SCAN
+06:21:51 LOOK cell=(4, 1) chassis=180deg gimbal_rel=-79deg gimbal_abs=101deg pitch=+0deg reason=MAP_SCAN
+06:21:53 LOOK cell=(4, 1) chassis=180deg gimbal_rel=-19deg gimbal_abs=161deg pitch=+0deg reason=MAP_SCAN
+06:21:53 yellow square #2 not hit from (4, 1), trying another spot
+06:21:55 centre check ended with lateral error +0.0 cm; continuing slowly with collision guards
+06:22:00 EMERGENCY STOP: left wall 5 cm, closing 0 cm/s
+06:22:03 LOOK cell=(5, 1) chassis=90deg gimbal_rel=+86deg gimbal_abs=176deg pitch=+0deg reason=MAP_SCAN
+06:22:03 a yellow card seen 64 deg off face-on from (5, 1) - too slanted to map, will look from a better spot
+06:22:03 LOOK cell=(5, 1) chassis=90deg gimbal_rel=+71deg gimbal_abs=161deg pitch=+0deg reason=MAP_SCAN
+06:22:04 LOOK cell=(5, 1) chassis=90deg gimbal_rel=+101deg gimbal_abs=191deg pitch=+0deg reason=MAP_SCAN
+06:22:05 LOOK cell=(5, 1) chassis=90deg gimbal_rel=+56deg gimbal_abs=146deg pitch=+0deg reason=MAP_SCAN
+06:22:07 LOOK cell=(5, 1) chassis=90deg gimbal_rel=+116deg gimbal_abs=206deg pitch=+0deg reason=MAP_SCAN
+06:22:07 yellow square #2 not hit from (5, 1), trying another spot
+06:22:09 LOOK cell=(5, 1) chassis=90deg gimbal_rel=-94deg gimbal_abs=356deg pitch=-10deg reason=MAP_SCAN
+06:22:09 LOOK cell=(5, 1) chassis=90deg gimbal_rel=-109deg gimbal_abs=341deg pitch=-10deg reason=MAP_SCAN
+06:22:10 LOOK cell=(5, 1) chassis=90deg gimbal_rel=-79deg gimbal_abs=11deg pitch=-10deg reason=MAP_SCAN
+06:22:11 LOOK cell=(5, 1) chassis=90deg gimbal_rel=-124deg gimbal_abs=326deg pitch=-10deg reason=MAP_SCAN
+06:22:12 LOOK cell=(5, 1) chassis=90deg gimbal_rel=-64deg gimbal_abs=26deg pitch=-10deg reason=MAP_SCAN
+06:22:12 blue rect_wide #2 not hit from (5, 1), trying another spot
+06:22:13 route: DFS branch&bound - 8 moves, 5 turns, ~49 s  |  greedy nearest 55s  greedy cover 63s  DFS branch&bound 49s  BFS state search 64s  Dijkstra (turns) 49s
+06:22:14 centre check ended with lateral error +1.0 cm; continuing slowly with collision guards
+06:22:14 too close to turn (Sharp L 13 / R 30 cm, front clear) - making room first
+06:22:21 too close to turn (Sharp L 12 / R 30 cm, front near) - making room first
+06:22:28 arrived 68% in, wall 213 mm ahead = far wall of this block
+06:22:29 LOOK cell=(4, 0) chassis=270deg gimbal_rel=+175deg gimbal_abs=85deg pitch=+0deg reason=MAP_SCAN
+06:22:30 LOOK cell=(4, 0) chassis=270deg gimbal_rel=+160deg gimbal_abs=70deg pitch=+0deg reason=MAP_SCAN
+06:22:33 LOOK cell=(4, 0) chassis=270deg gimbal_rel=-170deg gimbal_abs=100deg pitch=+0deg reason=MAP_SCAN
+06:22:36 LOOK cell=(4, 0) chassis=270deg gimbal_rel=+145deg gimbal_abs=55deg pitch=+0deg reason=MAP_SCAN
+06:22:38 LOOK cell=(4, 0) chassis=270deg gimbal_rel=-155deg gimbal_abs=115deg pitch=+0deg reason=MAP_SCAN
+06:22:39 yellow square #2 not hit from (4, 0), trying another spot
+06:22:39 giving up on yellow square #2
+06:22:41 centre check ended with lateral error +0.6 cm; continuing slowly with collision guards
+06:22:41 too close to turn (Sharp L 14 / R 30 cm, front near) - making room first
+06:22:50 EMERGENCY STOP: left wall 9 cm, closing 24 cm/s
+06:22:59 STOP
+06:22:59 gimbal route target search: not there in 2.5s - continuing safely
+06:22:59 green rect_tall not hit from (5, 2), trying another spot
+06:22:59 gimbal reset: not there in 2.5s - continuing safely
+06:22:59 gimbal reset: not there in 2.5s - continuing safely
+06:22:59 stopped

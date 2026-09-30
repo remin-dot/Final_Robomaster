@@ -19,8 +19,8 @@ Sharp calibration modes (recorded points):
 Without a calibration the RoboFinal Sharp formula is used:
     Vo = M / (L + 0.42) + C  ->  L = M / (Vo - C) - 0.42   (GP2Y0A41, 4-30 cm)
 
-Ports that never answer are switched off instead of blocking every poll for 3 s
-(the SDK "cmdid:0xf0 timeout" spam). Polled in a thread (~10 Hz), logged to CSV.
+Ports that stop answering enter a short cooldown and are then re-probed automatically
+instead of being disabled for the rest of the round. Polled in a thread, logged to CSV.
 """
 
 import csv
@@ -209,7 +209,9 @@ class SharpIR:
         }
         self.port = {"right": None, "left": None}     # chosen port, None = not found (yet)
         self.max_fail = int(cfg.get("max_failures", 3))
+        self.retry_s = max(0.5, float(cfg.get("retry_s", 3.0)))
         self._fails = {"right": 0, "left": 0}
+        self._retry_at = {"right": 0.0, "left": 0.0}
         self.M = float(cfg.get("M", 12.0))
         self.C = float(cfg.get("C", 0.0))
         self.min_cm = float(cfg.get("min_cm", 4.0))
@@ -222,6 +224,8 @@ class SharpIR:
         self.corners_enabled = bool(cc.get("enabled", False))
         self.corner_trigger_cm = float(cc.get("trigger_cm", 10.0))
         self.corner_port = {"left": tuple(cc.get("left_port", [1, 1])), "right": tuple(cc.get("right_port", [2, 2]))}
+        self._corner_config_port = dict(self.corner_port)
+        self._corner_retry_at = {"left": 0.0, "right": 0.0}
         default_active_low = bool(cc.get("active_low", True))
         self.corner_active_low = {
             side: bool(cc.get(f"{side}_active_low", default_active_low)) for side in SIDES
@@ -287,6 +291,15 @@ class SharpIR:
             return f"NO SIGNAL (never above raw {top} in {n} readings = ~0 V): cable loose / wrong port / no power"
         return "OK"
 
+    def usable(self, side):
+        """Whether a side Sharp may safely participate in steering decisions.
+
+        A disconnected Sharp is converted to ``max_cm`` by the distance filter.  That is
+        convenient for display, but must not be interpreted as a real clear side by the
+        centring controller once the no-signal detector has enough samples.
+        """
+        return self.sharp_status(side) == "OK"
+
     def probe(self):
         """Find which adaptor port each sensor is on (a missing one costs one SDK timeout)."""
         for side in ("right", "left"):
@@ -297,12 +310,14 @@ class SharpIR:
                     break
             else:
                 self.log(f"Sharp {side} NOT FOUND on {self.candidates[side]} - check sharp_ir in settings.yaml")
+                self._retry_at[side] = time.time() + self.retry_s
         if self.corners_enabled:
             for side in SIDES:
                 a, p = self.corner_port[side]
                 if self._get((a, p)) is None:
                     self.log(f"corner IR {side} NOT FOUND on adaptor {a} port {p} - check ir_corner")
                     self.corner_port[side] = None
+                    self._corner_retry_at[side] = time.time() + self.retry_s
                 else:
                     self.log(f"corner IR {side}: adaptor {a} port {p}")
 
@@ -315,13 +330,52 @@ class SharpIR:
             self._fails[side] += 1
             if self._fails[side] >= self.max_fail:
                 self.port[side] = None
-                self.log(f"IR {side} stopped answering (adaptor {port[0]} port {port[1]}) - switched off")
+                self._retry_at[side] = time.time() + self.retry_s
+                self.log(f"IR {side} stopped answering (adaptor {port[0]} port {port[1]}) - "
+                         f"temporarily offline; retrying in {self.retry_s:.0f}s")
         else:
             self._fails[side] = 0
         return raw
 
+    def _recover_missing(self, now):
+        """Re-probe channels disabled by a transient adaptor/SDK timeout.
+
+        The adaptor occasionally drops several consecutive reads.  Treating that as a
+        permanent disconnect left the drive controller using stale 30 cm values for the
+        rest of a round, so it could neither centre nor protect a chassis corner.
+        """
+        for side in SIDES:
+            if self.port[side] is not None or now < self._retry_at[side]:
+                continue
+            self._retry_at[side] = now + self.retry_s
+            for port in self.candidates[side]:
+                if self._get(port) is not None:
+                    self.port[side] = port
+                    self._fails[side] = 0
+                    self._sharp_count[side] = 0
+                    self._sharp_max[side] = 0
+                    self.log(f"IR {side} recovered on adaptor {port[0]} port {port[1]}")
+                    break
+        if not self.corners_enabled:
+            return
+        for side in SIDES:
+            if self.corner_port[side] is not None or now < self._corner_retry_at[side]:
+                continue
+            self._corner_retry_at[side] = now + self.retry_s
+            port = self._corner_config_port[side]
+            adc, io = read_port(self.adaptor, port)
+            if adc is None and io is None:
+                continue
+            self.corner_port[side] = port
+            self._corner_fails[side] = 0
+            with self.lock:
+                self.corner_sig[side].update(adc, io)
+                self.corner_raw[side], self.corner_io[side] = adc, io
+            self.log(f"corner IR {side} recovered on adaptor {port[0]} port {port[1]}")
+
     def read_once(self):
         """Poll both sensors now; returns (left_cm, right_cm)."""
+        self._recover_missing(time.time())
         # Safety first: read the front-corner switches before the slower analogue
         # side sensors so a wall trigger reaches the drive loop with minimum delay.
         if self.corners_enabled:
@@ -334,7 +388,9 @@ class SharpIR:
                     self._corner_fails[side] += 1
                     if self._corner_fails[side] >= self.max_fail:
                         self.corner_port[side] = None
-                        self.log(f"corner IR {side} stopped answering - switched off")
+                        self._corner_retry_at[side] = time.time() + self.retry_s
+                        self.log(f"corner IR {side} stopped answering - temporarily offline; "
+                                 f"retrying in {self.retry_s:.0f}s")
                 else:
                     self._corner_fails[side] = 0
                     with self.lock:

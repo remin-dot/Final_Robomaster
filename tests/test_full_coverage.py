@@ -14,7 +14,9 @@ class FullCoverageTests(unittest.TestCase):
         controller = ChassisController.__new__(ChassisController)
         controller.explore_mode = "all"
         controller.explore_order = ["front", "right", "left", "back"]
-        controller.strafe = True
+        # Production setting: turn the chassis to face every move so front ToF and both
+        # corner sensors protect it.  Coverage must still avoid needless revisits.
+        controller.strafe = False
         controller.SCAN_COST_S = 4.0
         controller._queue_spot = lambda *args: self.fail("coverage must not detour for shooting")
         controller._hard_card_blocks = lambda: set()
@@ -36,7 +38,7 @@ class FullCoverageTests(unittest.TestCase):
         self.assertEqual(goal, (2, 0))
         self.assertEqual(route, [(0, 0), (1, 0), (2, 0)])
 
-    def test_open_6x6_uses_minimum_35_moves_without_revisits(self):
+    def test_face_forward_open_6x6_uses_minimum_35_moves_without_revisits(self):
         controller = self.controller()
         opened = set()
         for x in range(6):

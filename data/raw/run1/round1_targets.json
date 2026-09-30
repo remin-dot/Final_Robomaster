@@ -5,101 +5,21 @@
   ],
   "tile_m": 0.6,
   "start": [
-    0,
-    0
-  ],
-  "start_heading": 0,
-  "end": [
     5,
-    3
+    5
+  ],
+  "start_heading": 2,
+  "end": [
+    2,
+    4
   ],
   "path": [
     [
-      0,
-      0
-    ],
-    [
-      0,
-      1
-    ],
-    [
-      0,
-      2
-    ],
-    [
-      0,
-      1
-    ],
-    [
-      1,
-      1
-    ],
-    [
-      1,
-      0
-    ],
-    [
-      2,
-      0
-    ],
-    [
-      2,
-      1
-    ],
-    [
-      1,
-      1
-    ],
-    [
-      1,
-      2
-    ],
-    [
-      1,
-      3
-    ],
-    [
-      0,
-      3
-    ],
-    [
-      0,
-      4
-    ],
-    [
-      1,
-      4
-    ],
-    [
-      1,
+      5,
       5
     ],
     [
-      0,
-      5
-    ],
-    [
-      1,
-      5
-    ],
-    [
-      1,
-      4
-    ],
-    [
-      1,
-      3
-    ],
-    [
-      2,
-      3
-    ],
-    [
-      2,
-      4
-    ],
-    [
-      2,
+      4,
       5
     ],
     [
@@ -111,48 +31,112 @@
       5
     ],
     [
-      2,
+      1,
+      5
+    ],
+    [
+      0,
+      5
+    ],
+    [
+      1,
+      5
+    ],
+    [
+      1,
       4
+    ],
+    [
+      1,
+      3
+    ],
+    [
+      0,
+      3
+    ],
+    [
+      1,
+      3
+    ],
+    [
+      1,
+      2
+    ],
+    [
+      1,
+      1
+    ],
+    [
+      1,
+      0
+    ],
+    [
+      1,
+      1
+    ],
+    [
+      1,
+      2
+    ],
+    [
+      2,
+      2
+    ],
+    [
+      2,
+      3
     ],
     [
       3,
-      4
-    ],
-    [
-      4,
-      4
-    ],
-    [
-      4,
       3
+    ],
+    [
+      3,
+      2
+    ],
+    [
+      3,
+      1
+    ],
+    [
+      2,
+      1
+    ],
+    [
+      2,
+      0
+    ],
+    [
+      3,
+      0
+    ],
+    [
+      3,
+      1
+    ],
+    [
+      3,
+      2
     ],
     [
       4,
       2
     ],
     [
-      3,
-      2
-    ],
-    [
-      2,
-      2
-    ],
-    [
-      3,
-      2
-    ],
-    [
-      3,
+      4,
       1
-    ],
-    [
-      3,
-      0
     ],
     [
       4,
       0
+    ],
+    [
+      5,
+      0
+    ],
+    [
+      5,
+      1
     ],
     [
       4,
@@ -167,24 +151,8 @@
       2
     ],
     [
-      4,
-      2
-    ],
-    [
-      3,
-      2
-    ],
-    [
-      3,
+      5,
       3
-    ],
-    [
-      3,
-      2
-    ],
-    [
-      4,
-      2
     ],
     [
       4,
@@ -195,42 +163,34 @@
       4
     ],
     [
-      4,
-      5
-    ],
-    [
-      5,
-      5
-    ],
-    [
       5,
       4
     ],
     [
-      5,
-      3
+      4,
+      4
+    ],
+    [
+      3,
+      4
+    ],
+    [
+      3,
+      5
+    ],
+    [
+      2,
+      5
+    ],
+    [
+      2,
+      4
     ]
   ],
   "visited": [
     [
       0,
-      0
-    ],
-    [
-      0,
-      1
-    ],
-    [
-      0,
-      2
-    ],
-    [
-      0,
       3
-    ],
-    [
-      0,
-      4
     ],
     [
       0,
@@ -331,6 +291,14 @@
     [
       4,
       5
+    ],
+    [
+      5,
+      0
+    ],
+    [
+      5,
+      1
     ],
     [
       5,
@@ -353,23 +321,12 @@
     [
       [
         0,
-        0
-      ],
-      3
-    ],
-    [
-      [
-        0,
         1
       ],
-      3
-    ],
-    [
       [
-        0,
-        2
-      ],
-      3
+        1,
+        1
+      ]
     ],
     [
       [
@@ -401,9 +358,12 @@
     [
       [
         0,
-        4
+        3
       ],
-      3
+      [
+        0,
+        4
+      ]
     ],
     [
       [
@@ -411,8 +371,8 @@
         4
       ],
       [
-        0,
-        5
+        1,
+        4
       ]
     ],
     [
@@ -439,6 +399,26 @@
     [
       [
         1,
+        0
+      ],
+      [
+        2,
+        0
+      ]
+    ],
+    [
+      [
+        1,
+        1
+      ],
+      [
+        2,
+        1
+      ]
+    ],
+    [
+      [
+        1,
         4
       ],
       [
@@ -452,16 +432,6 @@
         5
       ],
       0
-    ],
-    [
-      [
-        1,
-        5
-      ],
-      [
-        2,
-        5
-      ]
     ],
     [
       [
@@ -483,21 +453,21 @@
     [
       [
         2,
-        1
+        3
       ],
       [
-        3,
-        1
+        2,
+        4
       ]
     ],
     [
       [
         2,
-        3
+        4
       ],
       [
         3,
-        3
+        4
       ]
     ],
     [
@@ -513,6 +483,16 @@
         0
       ],
       2
+    ],
+    [
+      [
+        3,
+        0
+      ],
+      [
+        4,
+        0
+      ]
     ],
     [
       [
@@ -537,39 +517,9 @@
     [
       [
         3,
-        3
-      ],
-      [
-        4,
-        3
-      ]
-    ],
-    [
-      [
-        3,
-        4
-      ],
-      [
-        3,
-        5
-      ]
-    ],
-    [
-      [
-        3,
         5
       ],
       0
-    ],
-    [
-      [
-        3,
-        5
-      ],
-      [
-        4,
-        5
-      ]
     ],
     [
       [
@@ -581,29 +531,30 @@
     [
       [
         4,
-        0
+        5
       ],
+      0
+    ],
+    [
       [
         5,
         0
-      ]
+      ],
+      1
     ],
     [
-      [
-        4,
-        3
-      ],
       [
         5,
-        3
-      ]
+        0
+      ],
+      2
     ],
     [
       [
-        4,
-        5
+        5,
+        1
       ],
-      0
+      1
     ],
     [
       [
@@ -625,19 +576,19 @@
     [
       [
         5,
-        2
-      ],
-      [
-        5,
         3
-      ]
+      ],
+      1
     ],
     [
       [
         5,
         3
       ],
-      1
+      [
+        5,
+        4
+      ]
     ],
     [
       [
@@ -661,16 +612,6 @@
         0
       ],
       [
-        0,
-        1
-      ]
-    ],
-    [
-      [
-        0,
-        0
-      ],
-      [
         1,
         0
       ]
@@ -678,36 +619,6 @@
     [
       [
         0,
-        1
-      ],
-      [
-        0,
-        2
-      ]
-    ],
-    [
-      [
-        0,
-        1
-      ],
-      [
-        1,
-        1
-      ]
-    ],
-    [
-      [
-        0,
-        3
-      ],
-      [
-        0,
-        4
-      ]
-    ],
-    [
-      [
-        0,
         3
       ],
       [
@@ -721,8 +632,8 @@
         4
       ],
       [
-        1,
-        4
+        0,
+        5
       ]
     ],
     [
@@ -748,31 +659,11 @@
     [
       [
         1,
-        0
-      ],
-      [
-        2,
-        0
-      ]
-    ],
-    [
-      [
-        1,
         1
       ],
       [
         1,
         2
-      ]
-    ],
-    [
-      [
-        1,
-        1
-      ],
-      [
-        2,
-        1
       ]
     ],
     [
@@ -827,6 +718,16 @@
     ],
     [
       [
+        1,
+        5
+      ],
+      [
+        2,
+        5
+      ]
+    ],
+    [
+      [
         2,
         0
       ],
@@ -843,6 +744,16 @@
       [
         3,
         0
+      ]
+    ],
+    [
+      [
+        2,
+        1
+      ],
+      [
+        3,
+        1
       ]
     ],
     [
@@ -871,8 +782,8 @@
         3
       ],
       [
-        2,
-        4
+        3,
+        3
       ]
     ],
     [
@@ -883,16 +794,6 @@
       [
         2,
         5
-      ]
-    ],
-    [
-      [
-        2,
-        4
-      ],
-      [
-        3,
-        4
       ]
     ],
     [
@@ -913,16 +814,6 @@
       [
         3,
         1
-      ]
-    ],
-    [
-      [
-        3,
-        0
-      ],
-      [
-        4,
-        0
       ]
     ],
     [
@@ -958,11 +849,41 @@
     [
       [
         3,
+        3
+      ],
+      [
+        4,
+        3
+      ]
+    ],
+    [
+      [
+        3,
+        4
+      ],
+      [
+        3,
+        5
+      ]
+    ],
+    [
+      [
+        3,
         4
       ],
       [
         4,
         4
+      ]
+    ],
+    [
+      [
+        3,
+        5
+      ],
+      [
+        4,
+        5
       ]
     ],
     [
@@ -973,6 +894,16 @@
       [
         4,
         1
+      ]
+    ],
+    [
+      [
+        4,
+        0
+      ],
+      [
+        5,
+        0
       ]
     ],
     [
@@ -1028,41 +959,61 @@
     [
       [
         4,
-        4
-      ],
-      [
-        4,
-        5
-      ]
-    ],
-    [
-      [
-        4,
-        4
-      ],
-      [
-        5,
-        4
-      ]
-    ],
-    [
-      [
-        4,
-        5
-      ],
-      [
-        5,
-        5
-      ]
-    ],
-    [
-      [
-        5,
         3
       ],
       [
         5,
+        3
+      ]
+    ],
+    [
+      [
+        4,
         4
+      ],
+      [
+        4,
+        5
+      ]
+    ],
+    [
+      [
+        4,
+        4
+      ],
+      [
+        5,
+        4
+      ]
+    ],
+    [
+      [
+        4,
+        5
+      ],
+      [
+        5,
+        5
+      ]
+    ],
+    [
+      [
+        5,
+        0
+      ],
+      [
+        5,
+        1
+      ]
+    ],
+    [
+      [
+        5,
+        2
+      ],
+      [
+        5,
+        3
       ]
     ],
     [
@@ -1078,197 +1029,135 @@
   ],
   "targets": [
     {
-      "id": "yellow rect_tall",
-      "kind": "yellow rect_tall",
+      "id": "yellow rect_wide",
+      "kind": "yellow rect_wide",
       "color": "yellow",
-      "shape": "rect_tall",
-      "x_m": 0.27,
-      "y_m": 1.528,
-      "cell": [
-        0,
-        2
-      ],
-      "observations": 4,
-      "shot": true,
-      "seen_from": [
-        0,
-        1
-      ],
-      "best_dist_m": 0.6,
-      "views": [
-        {
-          "cell": [
-            0,
-            0
-          ],
-          "dist_m": 1.22
-        },
-        {
-          "cell": [
-            0,
-            1
-          ],
-          "dist_m": 0.6
-        }
-      ],
-      "best_view_deg": 90.0,
-      "first_seen": 1790742809.5,
-      "shape_votes": {
-        "rect_tall": 2.912
-      },
-      "confirmed": true,
-      "missed": false
-    },
-    {
-      "id": "red circle",
-      "kind": "red circle",
-      "color": "red",
-      "shape": "circle",
-      "x_m": 1.468,
-      "y_m": 1.034,
-      "cell": [
-        2,
-        1
-      ],
-      "observations": 3,
-      "shot": true,
-      "seen_from": [
-        2,
-        0
-      ],
-      "best_dist_m": 0.69,
-      "views": [
-        {
-          "cell": [
-            2,
-            0
-          ],
-          "dist_m": 0.69
-        }
-      ],
-      "best_view_deg": 3.5,
-      "first_seen": 1790742883.98,
-      "shape_votes": {
-        "circle": 2.702
-      },
-      "confirmed": true,
-      "missed": false
-    },
-    {
-      "id": "green rect_wide",
-      "kind": "green rect_wide",
-      "color": "green",
       "shape": "rect_wide",
-      "x_m": 1.012,
-      "y_m": 3.442,
+      "x_m": 2.007,
+      "y_m": 2.665,
       "cell": [
-        1,
-        5
-      ],
-      "observations": 2,
-      "shot": true,
-      "seen_from": [
-        1,
+        3,
         4
       ],
-      "best_dist_m": 0.74,
+      "observations": 8,
+      "shot": false,
+      "seen_from": [
+        3,
+        4
+      ],
+      "best_dist_m": 0.17,
       "views": [
         {
           "cell": [
-            1,
+            5,
+            5
+          ],
+          "dist_m": 1.3
+        },
+        {
+          "cell": [
+            5,
             4
           ],
-          "dist_m": 0.74
+          "dist_m": 1.04
+        },
+        {
+          "cell": [
+            3,
+            4
+          ],
+          "dist_m": 0.17
         }
       ],
-      "best_view_deg": 5.7,
-      "first_seen": 1790742966.62,
+      "best_view_deg": 23.3,
+      "first_seen": 1790809726.44,
       "shape_votes": {
-        "rect_wide": 2.008
+        "rect_wide": 13.004
       },
       "confirmed": true,
       "missed": false
     },
     {
-      "id": "green rect_tall",
-      "kind": "green rect_tall",
-      "color": "green",
-      "shape": "rect_tall",
-      "x_m": 0.168,
-      "y_m": 3.316,
+      "id": "yellow square",
+      "kind": "yellow square",
+      "color": "yellow",
+      "shape": "square",
+      "x_m": 3.215,
+      "y_m": 2.65,
       "cell": [
-        0,
-        5
+        5,
+        4
       ],
-      "observations": 3,
-      "shot": true,
-      "seen_from": [
-        0,
-        5
-      ],
-      "best_dist_m": 0.18,
-      "views": [
-        {
-          "cell": [
-            1,
-            5
-          ],
-          "dist_m": 0.65
-        },
-        {
-          "cell": [
-            0,
-            5
-          ],
-          "dist_m": 0.18
-        }
-      ],
-      "best_view_deg": 1.9,
-      "first_seen": 1790742987.39,
-      "shape_votes": {
-        "rect_tall": 6.572
-      },
-      "confirmed": true,
-      "missed": true
-    },
-    {
-      "id": "red rect_wide",
-      "kind": "red rect_wide",
-      "color": "red",
-      "shape": "rect_wide",
-      "x_m": 1.468,
-      "y_m": 3.478,
-      "cell": [
-        2,
-        5
-      ],
-      "observations": 2,
+      "observations": 5,
       "shot": false,
       "seen_from": [
-        2,
+        5,
         5
       ],
-      "best_dist_m": 0.19,
+      "best_dist_m": 0.66,
       "views": [
         {
           "cell": [
-            2,
+            5,
             5
           ],
-          "dist_m": 0.19
+          "dist_m": 0.66
         },
         {
           "cell": [
-            2,
-            2
+            4,
+            5
           ],
-          "dist_m": 1.85
+          "dist_m": 0.76
         }
       ],
-      "best_view_deg": 8.6,
-      "first_seen": 1790743064.01,
+      "best_view_deg": 56.8,
+      "first_seen": 1790809727.6,
       "shape_votes": {
-        "rect_wide": 5.06
+        "square": 2.381,
+        "rect_wide": 0.236
+      },
+      "confirmed": true,
+      "missed": false
+    },
+    {
+      "id": "yellow circle",
+      "kind": "yellow circle",
+      "color": "yellow",
+      "shape": "circle",
+      "x_m": 2.147,
+      "y_m": 3.484,
+      "cell": [
+        3,
+        5
+      ],
+      "observations": 11,
+      "shot": true,
+      "seen_from": [
+        3,
+        5
+      ],
+      "best_dist_m": 0.2,
+      "views": [
+        {
+          "cell": [
+            3,
+            5
+          ],
+          "dist_m": 0.2
+        },
+        {
+          "cell": [
+            4,
+            3
+          ],
+          "dist_m": 1.26
+        }
+      ],
+      "best_view_deg": 8.8,
+      "first_seen": 1790809759.64,
+      "shape_votes": {
+        "circle": 39.188
       },
       "confirmed": true,
       "missed": false
@@ -1278,236 +1167,434 @@
       "kind": "red rect_tall",
       "color": "red",
       "shape": "rect_tall",
-      "x_m": 3.361,
-      "y_m": 3.232,
+      "x_m": 1.54,
+      "y_m": 1.332,
       "cell": [
-        5,
-        5
+        2,
+        2
       ],
-      "observations": 3,
+      "observations": 9,
       "shot": true,
       "seen_from": [
-        4,
-        4
+        2,
+        2
       ],
-      "best_dist_m": 0.78,
+      "best_dist_m": 0.22,
       "views": [
         {
           "cell": [
-            3,
-            4
+            1,
+            3
           ],
-          "dist_m": 1.39
+          "dist_m": 0.86
         },
         {
           "cell": [
-            4,
-            4
+            2,
+            2
           ],
-          "dist_m": 0.78
+          "dist_m": 0.22
         }
       ],
-      "best_view_deg": 36.9,
-      "first_seen": 1790743104.02,
+      "best_view_deg": 21.8,
+      "first_seen": 1790809832.39,
       "shape_votes": {
-        "rect_tall": 1.489
+        "rect_tall": 13.379
       },
       "confirmed": true,
-      "missed": true
+      "missed": false
     },
     {
       "id": "blue circle",
       "kind": "blue circle",
       "color": "blue",
       "shape": "circle",
-      "x_m": 2.206,
-      "y_m": 2.26,
+      "x_m": 0.912,
+      "y_m": 0.118,
       "cell": [
-        3,
-        3
+        1,
+        0
       ],
-      "observations": 3,
-      "shot": true,
+      "observations": 6,
+      "shot": false,
       "seen_from": [
-        3,
-        2
+        1,
+        0
       ],
-      "best_dist_m": 0.72,
+      "best_dist_m": 0.2,
+      "views": [
+        {
+          "cell": [
+            1,
+            1
+          ],
+          "dist_m": 0.72
+        },
+        {
+          "cell": [
+            1,
+            0
+          ],
+          "dist_m": 0.2
+        }
+      ],
+      "best_view_deg": 11.0,
+      "first_seen": 1790809893.16,
+      "shape_votes": {
+        "circle": 15.807
+      },
+      "confirmed": true,
+      "missed": false
+    },
+    {
+      "id": "yellow rect_wide #2",
+      "kind": "yellow rect_wide",
+      "color": "yellow",
+      "shape": "rect_wide",
+      "x_m": 1.073,
+      "y_m": 0.906,
+      "cell": [
+        1,
+        1
+      ],
+      "observations": 6,
+      "shot": false,
+      "seen_from": [
+        1,
+        1
+      ],
+      "best_dist_m": 0.17,
+      "views": [
+        {
+          "cell": [
+            1,
+            1
+          ],
+          "dist_m": 0.17
+        }
+      ],
+      "best_view_deg": 2.2,
+      "first_seen": 1790809894.66,
+      "shape_votes": {
+        "rect_wide": 29.615
+      },
+      "confirmed": true,
+      "missed": false
+    },
+    {
+      "id": "yellow square #2",
+      "kind": "yellow square",
+      "color": "yellow",
+      "shape": "square",
+      "x_m": 3.335,
+      "y_m": 0.355,
+      "cell": [
+        5,
+        0
+      ],
+      "observations": 14,
+      "shot": false,
+      "seen_from": [
+        5,
+        0
+      ],
+      "best_dist_m": 0.16,
       "views": [
         {
           "cell": [
             3,
             2
           ],
-          "dist_m": 0.72
-        }
-      ],
-      "best_view_deg": 6.7,
-      "first_seen": 1790743154.65,
-      "shape_votes": {
-        "circle": 1.829
-      },
-      "confirmed": true,
-      "missed": true
-    },
-    {
-      "id": "yellow rect_tall #2",
-      "kind": "yellow rect_tall",
-      "color": "yellow",
-      "shape": "rect_tall",
-      "x_m": 3.454,
-      "y_m": 2.239,
-      "cell": [
-        5,
-        3
-      ],
-      "observations": 2,
-      "shot": true,
-      "seen_from": [
-        5,
-        4
-      ],
-      "best_dist_m": 0.47,
-      "views": [
+          "dist_m": 1.16
+        },
+        {
+          "cell": [
+            4,
+            1
+          ],
+          "dist_m": 0.78
+        },
+        {
+          "cell": [
+            4,
+            0
+          ],
+          "dist_m": 0.58
+        },
         {
           "cell": [
             5,
-            4
+            0
           ],
-          "dist_m": 0.47
+          "dist_m": 0.16
         }
       ],
-      "best_view_deg": 90.0,
-      "first_seen": 1790743376.57,
+      "best_view_deg": 7.8,
+      "first_seen": 1790809991.23,
       "shape_votes": {
-        "rect_tall": 2.134
+        "square": 21.272
       },
       "confirmed": true,
-      "missed": true
-    }
-  ],
-  "shots": [
-    {
-      "id": "yellow rect_tall",
-      "kind": "yellow rect_tall",
-      "robot_cell": [
-        0,
-        1
-      ],
-      "t": 1790742823.267686,
-      "t_s": 21.5
-    },
-    {
-      "id": "red circle",
-      "kind": "red circle",
-      "robot_cell": [
-        2,
-        0
-      ],
-      "t": 1790742893.062536,
-      "t_s": 91.3
-    },
-    {
-      "id": "green rect_wide",
-      "kind": "green rect_wide",
-      "robot_cell": [
-        1,
-        4
-      ],
-      "t": 1790742970.709776,
-      "t_s": 169.0
+      "missed": false
     },
     {
       "id": "green rect_tall",
       "kind": "green rect_tall",
+      "color": "green",
+      "shape": "rect_tall",
+      "x_m": 2.984,
+      "y_m": 2.017,
+      "cell": [
+        4,
+        3
+      ],
+      "observations": 7,
+      "shot": false,
+      "seen_from": [
+        4,
+        2
+      ],
+      "best_dist_m": 0.58,
+      "views": [
+        {
+          "cell": [
+            3,
+            2
+          ],
+          "dist_m": 1.0
+        },
+        {
+          "cell": [
+            4,
+            2
+          ],
+          "dist_m": 0.58
+        }
+      ],
+      "best_view_deg": 35.8,
+      "first_seen": 1790809992.36,
+      "shape_votes": {
+        "rect_tall": 1.303,
+        "square": 0.602
+      },
+      "confirmed": true,
+      "missed": false
+    },
+    {
+      "id": "red square",
+      "kind": "red square",
+      "color": "red",
+      "shape": "square",
+      "x_m": 3.256,
+      "y_m": 0.901,
+      "cell": [
+        5,
+        1
+      ],
+      "observations": 14,
+      "shot": true,
+      "seen_from": [
+        4,
+        1
+      ],
+      "best_dist_m": 0.53,
+      "views": [
+        {
+          "cell": [
+            3,
+            2
+          ],
+          "dist_m": 1.18
+        },
+        {
+          "cell": [
+            4,
+            1
+          ],
+          "dist_m": 0.53
+        },
+        {
+          "cell": [
+            4,
+            0
+          ],
+          "dist_m": 0.81
+        }
+      ],
+      "best_view_deg": 27.0,
+      "first_seen": 1790809991.23,
+      "shape_votes": {
+        "rect_tall": 9.547,
+        "square": 50.0
+      },
+      "confirmed": true,
+      "missed": false
+    },
+    {
+      "id": "blue rect_wide",
+      "kind": "blue rect_wide",
+      "color": "blue",
+      "shape": "rect_wide",
+      "x_m": 1.937,
+      "y_m": 2.231,
+      "cell": [
+        3,
+        3
+      ],
+      "observations": 10,
+      "shot": false,
+      "seen_from": [
+        2,
+        3
+      ],
+      "best_dist_m": 0.39,
+      "views": [
+        {
+          "cell": [
+            2,
+            2
+          ],
+          "dist_m": 0.74
+        },
+        {
+          "cell": [
+            2,
+            3
+          ],
+          "dist_m": 0.39
+        },
+        {
+          "cell": [
+            3,
+            2
+          ],
+          "dist_m": 0.65
+        },
+        {
+          "cell": [
+            4,
+            2
+          ],
+          "dist_m": 0.98
+        }
+      ],
+      "best_view_deg": 39.2,
+      "first_seen": 1790809953.29,
+      "shape_votes": {
+        "rect_wide": 2.716,
+        "square": 1.514
+      },
+      "confirmed": true,
+      "missed": false
+    },
+    {
+      "id": "blue rect_wide #2",
+      "kind": "blue rect_wide",
+      "color": "blue",
+      "shape": "rect_wide",
+      "x_m": 3.272,
+      "y_m": 1.27,
+      "cell": [
+        5,
+        2
+      ],
+      "observations": 5,
+      "shot": true,
+      "seen_from": [
+        5,
+        2
+      ],
+      "best_dist_m": 0.23,
+      "views": [
+        {
+          "cell": [
+            5,
+            2
+          ],
+          "dist_m": 0.23
+        }
+      ],
+      "best_view_deg": 6.9,
+      "first_seen": 1790810184.74,
+      "shape_votes": {
+        "rect_wide": 20.98
+      },
+      "confirmed": true,
+      "missed": false
+    }
+  ],
+  "shots": [
+    {
+      "id": "yellow circle",
+      "kind": "yellow circle",
       "robot_cell": [
-        1,
+        3,
         5
       ],
-      "t": 1790742996.340954,
-      "t_s": 194.6
+      "t": 1790809761.5339499,
+      "t_s": 42.9
     },
     {
       "id": "red rect_tall",
       "kind": "red rect_tall",
       "robot_cell": [
-        4,
-        4
+        1,
+        3
       ],
-      "t": 1790743122.514477,
-      "t_s": 320.8
+      "t": 1790809833.805037,
+      "t_s": 115.2
     },
     {
-      "id": "blue circle",
-      "kind": "blue circle",
+      "id": "red square",
+      "kind": "red square",
       "robot_cell": [
         3,
         2
       ],
-      "t": 1790743166.415261,
-      "t_s": 364.7
+      "t": 1790809994.332764,
+      "t_s": 275.7
     },
     {
-      "id": "yellow rect_tall #2",
-      "kind": "yellow rect_tall",
+      "id": "blue rect_wide #2",
+      "kind": "blue rect_wide",
       "robot_cell": [
         5,
-        4
+        2
       ],
-      "t": 1790743384.320346,
-      "t_s": 582.6
+      "t": 1790810186.8726459,
+      "t_s": 468.2
     }
   ],
   "round": 1,
-  "elapsed_s": 596.3,
+  "elapsed_s": 601.6,
   "time_limit_s": 600,
   "designated_targets": [
-    "blue circle",
-    "blue rect_tall",
     "blue rect_wide",
-    "blue square",
-    "green circle",
     "green rect_tall",
-    "green rect_wide",
-    "green square",
     "red circle",
     "red rect_tall",
     "red rect_wide",
     "red square",
     "yellow circle",
-    "yellow rect_tall",
-    "yellow rect_wide",
     "yellow square"
   ],
   "route_plan": null,
   "splits": [
     {
-      "id": "yellow rect_tall",
-      "t_s": 21.5
-    },
-    {
-      "id": "red circle",
-      "t_s": 91.3
-    },
-    {
-      "id": "green rect_wide",
-      "t_s": 169.0
-    },
-    {
-      "id": "green rect_tall",
-      "t_s": 194.6
+      "id": "yellow circle",
+      "t_s": 42.9
     },
     {
       "id": "red rect_tall",
-      "t_s": 320.8
+      "t_s": 115.2
     },
     {
-      "id": "blue circle",
-      "t_s": 364.7
+      "id": "red square",
+      "t_s": 275.7
     },
     {
-      "id": "yellow rect_tall #2",
-      "t_s": 582.6
+      "id": "blue rect_wide #2",
+      "t_s": 468.2
     }
   ]
 }
