@@ -22,7 +22,14 @@ import traceback
 import cv2
 import numpy as np
 
+try:
+    from robomaster import led as rm_led
+    from robomaster import robot as rm_robot
+except Exception:  # demo / webcam without the SDK
+    rm_led = rm_robot = None
+
 from mission_panel import HEADING_DEG, BASE_DIR
+from route_planner import card_normal
 
 SOURCES = ("robot", "webcam", "demo")
 CONNECTIONS = (("ap", "Wi-Fi direct (AP)"), ("sta", "Router (STA)"), ("rndis", "USB"))
@@ -137,7 +144,8 @@ class MissionController:
 
         ch = ChassisController(ep, self.config)
         ch.panel = self.panel
-        self.shooter = TargetShooter(ep, self.panel, self.config, get_tof_mm=lambda: ch.current_tof_dist_mm)
+        self.shooter = TargetShooter(ep, self.panel, self.config, get_tof_mm=lambda: ch.current_tof_dist_mm,
+                                     gimbal_hist=lambda: ch.gimbal_hist)
         self.shooter.armed = self.armed
         ch.shooter = self.shooter
         ch.setup_csv_headers()
@@ -188,7 +196,8 @@ class MissionController:
         def telemetry():
             w = math.sin(time.time())
             return {"odom": "(+0.00, +0.00) m", "yaw": "+0.0 deg", "tof_mm": 650 + 250 * w,
-                    "ir_left_cm": 14.0 + 4 * w, "ir_right_cm": 30.0, "ir_max_cm": 30.0, "ir_wall_cm": 16.9}
+                    "ir_left_cm": 14.0 + 4 * w, "ir_right_cm": 30.0, "ir_max_cm": 30.0, "ir_wall_cm": 9.0,
+                    "ir_mount": "side", "corner_left_near": w > 0.6, "corner_right_near": False}
 
         self.panel.telemetry = telemetry
         self.panel.worker.set_source(read)
@@ -214,13 +223,18 @@ class MissionController:
             color, shape = split_kind(kind)
             wm, hm = p.detector.plate[shape]
             w, h = f * wm / d, f * hm / d
+            # a card hangs flat on its wall: seen at a slant it looks narrower (width x cos)
+            n = card_normal((tx, ty), m.tile, m.nx, m.ny)
+            if n is not None:
+                w *= max(0.08, abs((rx - tx) * n[0] + (ry - ty) * n[1]) / d)
             # card centre 12 cm below the camera; a camera pitched down (pitch < 0) sees it higher up
             elev = -math.degrees(math.atan2(0.12, d))
             pitch = p.detector.gimbal_pitch_deg
             cx, cy = W / 2 + f * math.tan(math.radians(b)), H / 2 - f * math.tan(math.radians(elev - pitch))
             cv2.line(img, (int(cx), int(cy)), (int(cx), int(cy + f * 0.10 / d)), (60, 60, 60), max(1, int(f * 0.008 / d)))
             if shape == "circle":
-                cv2.circle(img, (int(cx), int(cy)), int(w / 2), colors[color], -1, cv2.LINE_AA)
+                cv2.ellipse(img, (int(cx), int(cy)), (max(1, int(w / 2)), int(h / 2)), 0, 0, 360,
+                            colors[color], -1, cv2.LINE_AA)
             else:
                 cv2.rectangle(img, (int(cx - w / 2), int(cy - h / 2)), (int(cx + w / 2), int(cy + h / 2)),
                               colors[color], -1)
@@ -291,6 +305,8 @@ class MissionController:
         try:
             self._wake()                     # after being carried back to the start
             p.start_round(p.round_no)
+            if not self.armed:               # last run went the whole round like this without noticing
+                p.log("BLASTER OFF (dry run): it aims but fires NOTHING - tick 'Blaster armed' in Actions")
             if self.source == "demo":
                 self._demo_mission()
             elif p.round_no >= 2 and p.prev_round is not None:
@@ -350,30 +366,56 @@ class MissionController:
             self._spawn(self._wake)
 
     def _release(self):
-        """Gimbal motors to sleep (turn it straight by hand) and no more drive commands.
-        The SDK has no free-wheel command for the chassis: lift the robot to carry it."""
+        """Let go of everything the SDK can let go of, so the robot can be carried back
+        to the start and the gimbal straightened by hand:
+          * chassis: last command = stand still, then no more drive commands
+            (the SDK has no wheel free-wheel / torque-off command: lift it to carry it)
+          * robot mode FREE: chassis and gimbal no longer follow each other, so turning
+            one by hand does not make the other one move
+          * gimbal: motors asleep (turn it by hand)
+          * blaster / LEDs: idle (LEDs dim blue = released)"""
         ep = self.ep_robot
         if ep is None or self.released:
             return
-        try:
-            ep.chassis.drive_speed(x=0, y=0, z=0)     # last command: stand still, then nothing more
-        except Exception:
-            pass
-        try:
-            ep.gimbal.suspend()
-        except Exception as e:
-            self.panel.log(f"gimbal suspend failed: {e}")
+        done, failed = [], []
+
+        def step(name, fn):
+            try:
+                fn()
+                done.append(name)
+            except Exception as e:
+                failed.append(f"{name} ({e})")
+
+        step("wheels stopped", lambda: ep.chassis.drive_speed(x=0, y=0, z=0))
+        step("wheel speeds 0", lambda: ep.chassis.drive_wheels(w1=0, w2=0, w3=0, w4=0))
+        step("gimbal stopped", lambda: ep.gimbal.drive_speed(pitch_speed=0, yaw_speed=0))
+        step("free mode", lambda: ep.set_robot_mode(mode=rm_robot.FREE if rm_robot else "free"))
+        step("gimbal asleep", ep.gimbal.suspend)
+        step("LEDs idle", lambda: ep.led.set_led(comp="all", r=0, g=0, b=60,
+                                                effect=getattr(rm_led, "EFFECT_ON", "on") if rm_led else "on"))
         self.released = True
-        self.panel.log("robot released: carry it to the start, straighten the gimbal by hand")
+        self.panel.log("robot released: " + ", ".join(done) +
+                       " - carry it to the start and straighten the gimbal by hand")
+        if failed:
+            self.panel.log("release: could not do " + "; ".join(failed))
 
     def _wake(self):
-        """Undo release: gimbal motors on again (the round then centres it on the chassis)."""
+        """Undo release: gimbal motors on, LEDs green, gimbal centred on the chassis."""
         ep = self.ep_robot
         if ep is None or not self.released:
             return
         try:
             ep.gimbal.resume()
             time.sleep(0.6)
+            try:
+                ep.set_robot_mode(mode=rm_robot.FREE if rm_robot else "free")   # chassis and gimbal apart
+            except Exception:
+                pass
+            try:
+                ep.led.set_led(comp="all", r=0, g=255, b=0,
+                               effect=getattr(rm_led, "EFFECT_ON", "on") if rm_led else "on")
+            except Exception:
+                pass
             # a sleeping gimbal sags; level it before anything uses the camera
             ep.gimbal.recenter(pitch_speed=120, yaw_speed=120).wait_for_completed(timeout=3)
             self.panel.detector.gimbal_pitch_deg = 0.0
@@ -498,17 +540,53 @@ class MissionController:
     def nudge_aim(self, pitch=0.0, yaw=0.0):
         """Aim trim (RoboFinal: shots too high -> Aim down)."""
         cfg = self.config.setdefault("shooting", {})
-        cfg["aim_pitch_offset_deg"] = round(float(cfg.get("aim_pitch_offset_deg", -3.5)) + pitch, 2)
+        cfg["aim_pitch_offset_deg"] = round(float(cfg.get("aim_pitch_offset_deg", 0.0)) + pitch, 2)
         cfg["aim_yaw_offset_deg"] = round(float(cfg.get("aim_yaw_offset_deg", 0.0)) + yaw, 2)
         if self.shooter is not None:
             self.shooter.pitch_offset = cfg["aim_pitch_offset_deg"]
             self.shooter.yaw_offset = cfg["aim_yaw_offset_deg"]
+            if pitch:
+                self._fit_pitch_trim()
+
+    def _fit_pitch_trim(self):
+        """Each Up / Down trim is remembered with the distance of the last shot. With trims at two
+        distances (e.g. 0.5 m and 0.9 m) the pitch aim is fitted as offset + atan(barrel / d):
+        a fixed tilt plus the barrel sitting below the camera, which matters most up close -
+        one trim alone cannot get both right (last runs: hits at 0.44 m, misses at 0.88 m)."""
+        sh = self.shooter
+        d = sh.last_lock_dist
+        if not d or d <= 0.1:
+            return
+        need = sh.pitch_offset_at(d)                        # what the aim at this distance must be
+        samples = getattr(self, "_trim_samples", {})
+        samples[round(d / 0.05) * 0.05] = need
+        self._trim_samples = samples
+        ds = sorted(samples)
+        if len(ds) < 2 or ds[-1] - ds[0] < 0.25:
+            self.panel.log(f"trim at {d:.2f} m noted - trim once more at a different distance to fit both parts")
+            return
+        # least squares: need = a + (180/pi) * b / d
+        xs = [math.degrees(1.0) / x for x in ds]
+        ys = [samples[x] for x in ds]
+        n = len(xs)
+        mx, my = sum(xs) / n, sum(ys) / n
+        sxx = sum((x - mx) ** 2 for x in xs)
+        b = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sxx if sxx > 0 else sh.barrel_below_m
+        b = max(-0.10, min(0.15, b))
+        a = my - b * mx
+        sh.pitch_offset, sh.barrel_below_m = round(a, 2), round(b, 4)
+        cfg = self.config.setdefault("shooting", {})
+        cfg["aim_pitch_offset_deg"], cfg["barrel_below_camera_m"] = sh.pitch_offset, sh.barrel_below_m
+        self.panel.log(f"aim fitted from trims at {', '.join(f'{x:.2f}' for x in ds)} m: tilt {a:+.2f} deg, "
+                       f"barrel {b * 100:+.1f} cm below the camera - Save to keep")
 
     def save_trim(self):
         from mission_panel import save_setting
         cfg = self.config.get("shooting", {})
-        save_setting("shooting", "aim_pitch_offset_deg", cfg.get("aim_pitch_offset_deg", -3.5))
+        save_setting("shooting", "aim_pitch_offset_deg", cfg.get("aim_pitch_offset_deg", 0.0))
         save_setting("shooting", "aim_yaw_offset_deg", cfg.get("aim_yaw_offset_deg", 0.0))
+        if self.shooter is not None:
+            save_setting("shooting", "barrel_below_camera_m", self.shooter.barrel_below_m)
         self.panel.log("aim trim saved to config/settings.yaml")
 
     def calibrate_distance(self, known_m=1.0):
@@ -558,8 +636,8 @@ class MissionController:
                 p.map.gimbal_abs = (HEADING_DEG[d] + g) % 360
                 time.sleep(0.1)  # let the camera show the new direction
                 for f in p.observe_targets(cell, p.map.gimbal_abs, settle_ts=time.time()):
-                    if f.in_range and p.should_shoot(f.target_id):
-                        self._demo_aim(f)
+                    if f.in_range and p.should_shoot(f.target_id) and p.map.in_reach(cell, f.target_id):
+                        self._demo_aim(f)       # same rule as the robot: this block or the next one only
                 time.sleep(0.25)
             time.sleep(0.4)
 

@@ -4,8 +4,9 @@ Pure Python (no robot / OpenCV) so it can be tested offline:
 
     python3 src/route_planner.py data/raw/run1/round1_targets.json
 
-For every designated target we look for a *firing cell*: a cell within the
-2-tile shooting range with a clear line of sight (no known wall in between).
+For every designated target we look for a *firing cell*: the target's own block
+or the block right next to it (straight, not diagonal) with no known wall in
+between - the robot never shoots across a block.
 Cells the target was actually seen from in round 1 are preferred, because the
 camera already proved it can see the target from there.  Targets are visited
 greedily (nearest first by BFS path length) using only edges that round 1
@@ -104,16 +105,144 @@ def aim_deg(cell, target_xy_m, tile):
     return math.degrees(math.atan2(target_xy_m[0] - x0, target_xy_m[1] - y0)) % 360
 
 
-def firing_cells(graph, target, tile, max_shoot_m, exclude=(), margin=0.9):
+# shooting rule (settings.yaml shooting.reach_pattern):
+#   "3x3"   - the card is in the robot's block or any of the 8 blocks around it (diagonals
+#             too): the robot stands in the middle of a 3 x 3 square, the card inside it
+#   "cross" - the old rule: own block or the next block straight left / right / ahead /
+#             behind, on the robot's row / column line
+# Always: no known wall between, and not seen too edge-on (SHOT_MAX_VIEW_DEG).
+REACH_CELLS = 1
+REACH_PATTERN = "3x3"
+
+
+def target_cell(graph, target_xy_m, tile):
+    """Block a card position (m) is in, clamped to the maze."""
+    return (min(max(int(target_xy_m[0] // tile), 0), graph.nx - 1),
+            min(max(int(target_xy_m[1] // tile), 0), graph.ny - 1))
+
+
+# a card in the next block is shot from here only when it sits straight ahead in that
+# block (left / right / front / back): within this far of the robot's row / column line,
+# and seen at most this slanted. Anything else is a hard angle -> from inside its block.
+STRAIGHT_BAND_M = 0.2
+SHOT_MAX_VIEW_DEG = 55.0
+
+
+def straight_shot(graph, cell, target_xy_m, tile, step):
+    """The card in the neighbour block `step` away is straight in line with this block and
+    not seen too slanted (last run shot cards 0.25 m off the line and 71 deg edge-on)."""
+    cx, cy = (cell[0] + 0.5) * tile, (cell[1] + 0.5) * tile
+    off = abs(target_xy_m[1] - cy) if step[0] else abs(target_xy_m[0] - cx)
+    if off > STRAIGHT_BAND_M:
+        return False
+    view = cell_view_deg(cell, target_xy_m, tile, graph.nx, graph.ny, open_test(graph.open))
+    return view <= SHOT_MAX_VIEW_DEG
+
+
+def within_reach(graph, cell, target_xy_m, tile, reach=None):
+    """True when a card at target_xy_m may be shot from `cell` (see REACH_PATTERN): its block
+    is within `reach` blocks in both directions (3x3 around the robot for reach 1) - or, with
+    the old "cross" pattern, straight in line - with no known wall between and not seen too
+    edge-on."""
+    reach = REACH_CELLS if reach is None else reach
+    cell = tuple(cell)
+    tc = target_cell(graph, target_xy_m, tile)
+    dx, dy = tc[0] - cell[0], tc[1] - cell[1]
+    if REACH_PATTERN == "cross":
+        if dx and dy:                  # diagonal: that is across a block
+            return False
+        if abs(dx) + abs(dy) > reach:
+            return False
+        if (dx or dy) and not straight_shot(graph, cell, target_xy_m, tile, (dx, dy)):
+            return False               # off to the side / too slanted: shoot it from inside its own block
+    else:
+        if max(abs(dx), abs(dy)) > reach:
+            return False               # outside the 3 x 3 square around the robot
+        if (dx or dy) and cell_view_deg(cell, target_xy_m, tile, graph.nx, graph.ny,
+                                        open_test(graph.open)) > SHOT_MAX_VIEW_DEG:
+            return False               # nearly edge-on from here: a better spot will be found
+    if graph.line_of_sight(cell, target_xy_m, tile):
+        return True
+    # a card on the face of the wall between the blocks is often mapped a few cm
+    # beyond it: pulled 8 cm towards the robot it must then be in plain view
+    cx, cy = (cell[0] + 0.5) * tile, (cell[1] + 0.5) * tile
+    d = math.hypot(target_xy_m[0] - cx, target_xy_m[1] - cy)
+    if d < 1e-6:
+        return True
+    k = max(0.0, d - 0.08) / d
+    return graph.line_of_sight(cell, (cx + (target_xy_m[0] - cx) * k, cy + (target_xy_m[1] - cy) * k), tile)
+
+
+RECT_FAMILY = ("square", "rect_wide", "rect_tall")
+FRONTAL_DEG = 35.0      # a view closer than this to face-on shows the true shape
+MAX_VIEW_DEG = 65.0     # beyond this the card is almost edge-on: no firing spot
+
+
+def card_normal(target_xy_m, tile, nx=None, ny=None, max_off=None, is_open=None):
+    """Unit normal of the wall a card hangs on: the nearest edge of its block that is
+    not a known-open passage (cards hang on walls). None when no such edge is close,
+    or when two walls are about as close (a card near a corner: cannot tell which).
+    is_open(cell, dir) -> True for a passage the robot knows is open."""
+    x, y = target_xy_m
+    cx, cy = int(x // tile), int(y // tile)
+    if nx is not None:
+        cx = min(max(cx, 0), nx - 1)
+        cy = min(max(cy, 0), ny - 1)
+    # dir: 0 N, 1 E, 2 S, 3 W (as MOVES); normal points into the block
+    edges = [(abs((cy + 1) * tile - y), 0, (0.0, -1.0)), (abs((cx + 1) * tile - x), 1, (-1.0, 0.0)),
+             (abs(y - cy * tile), 2, (0.0, 1.0)), (abs(x - cx * tile), 3, (1.0, 0.0))]
+    if is_open is not None:
+        edges = [e for e in edges if not is_open((cx, cy), e[1])]
+    if not edges:
+        return None
+    edges.sort()
+    lim = tile * 0.3 if max_off is None else max_off
+    if edges[0][0] > lim:
+        return None
+    if len(edges) > 1 and edges[1][0] <= lim and edges[1][0] - edges[0][0] < 0.08:
+        return None
+    return edges[0][2]
+
+
+def view_angle_deg(from_xy_m, target_xy_m, normal):
+    """Angle between the line of sight and the card's face normal (0 = face-on).
+    The normal's sign does not matter (a card near a block edge may be mapped on
+    either side of it)."""
+    if normal is None:
+        return 0.0
+    vx, vy = from_xy_m[0] - target_xy_m[0], from_xy_m[1] - target_xy_m[1]
+    d = math.hypot(vx, vy)
+    if d < 1e-6:
+        return 0.0
+    c = abs(vx * normal[0] + vy * normal[1]) / d
+    return math.degrees(math.acos(min(1.0, c)))
+
+
+def cell_view_deg(cell, target_xy_m, tile, nx=None, ny=None, is_open=None):
+    """View angle of a card from a block centre (0 when the card's wall is unknown)."""
+    return view_angle_deg(((cell[0] + 0.5) * tile, (cell[1] + 0.5) * tile), target_xy_m,
+                          card_normal(target_xy_m, tile, nx, ny, is_open=is_open))
+
+
+def open_test(open_edges):
+    """is_open(cell, dir) for card_normal from a set of frozenset edges."""
+    def is_open(cell, d):
+        dx, dy = MOVES[d]
+        return frozenset((tuple(cell), (cell[0] + dx, cell[1] + dy))) in open_edges
+    return is_open
+
+
+def firing_cells(graph, target, tile, max_shoot_m, exclude=(), margin=0.9, reach=None):
     """Candidate cells to shoot `target` from, best first: [(cell, dist, seen)].
 
-    `margin` keeps the cell inside the range limit: the saved target position
-    has some error, and a cell right at 2.00 tiles may measure as too far."""
+    Only cells within the shooting rule (see within_reach: this block or the next
+    one straight ahead, no wall between). `margin` keeps the cell inside the range
+    limit: the saved target position has some error."""
     txy = (target["x_m"], target["y_m"])
     seen = {tuple(v["cell"]): v["dist_m"] for v in target.get("views", [])}
     if target.get("seen_from"):
         seen.setdefault(tuple(target["seen_from"]), target.get("best_dist_m", 0))
-    out = []
+    out, edge_on = [], []
     for x in range(graph.nx):
         for y in range(graph.ny):
             c = (x, y)
@@ -123,10 +252,16 @@ def firing_cells(graph, target, tile, max_shoot_m, exclude=(), margin=0.9):
             # too close: the plate may be above/below the camera view
             if d > max_shoot_m * margin or d < 0.25 * tile:
                 continue
-            if c not in seen and not graph.line_of_sight(c, txy, tile):
+            if not within_reach(graph, c, txy, tile, reach):
+                continue
+            # almost edge-on: the shape cannot be told and the pellet glances off
+            if cell_view_deg(c, txy, tile, graph.nx, graph.ny, open_test(graph.open)) > MAX_VIEW_DEG:
+                edge_on.append((c, d, c in seen))
                 continue
             out.append((c, d, c in seen))
-    out.sort(key=lambda t: (not t[2], t[1]))
+    out = out or edge_on          # nothing better: a slanted spot is still worth a try
+    # face-on spots first (true shape + a clean hit), then proven views, then the nearest
+    out.sort(key=lambda t: (cell_view_deg(t[0], txy, tile, graph.nx, graph.ny, open_test(graph.open)) > FRONTAL_DEG, not t[2], t[1]))
     return out
 
 
@@ -223,7 +358,8 @@ COST = {"move_s": 2.6,       # drive one cell (turn to face it is extra)
         "aim_s": 3.0,        # aim + fire at one target from a stop
         "stop_s": 1.5,       # each stop: brake, settle, start again
         "unseen_s": 1.5,     # firing spot the target was never seen from (line of sight unproven)
-        "unknown_edge_s": 2.0}  # passage round 1 never saw open (may be a wall)
+        "unknown_edge_s": 2.0,  # passage round 1 never saw open (may be a wall)
+        "oblique_s": 6.0}    # firing spot that sees the card at a slant (> 35 deg off face-on)
 
 
 def turn_cost(h, d, cost=COST):
@@ -246,10 +382,14 @@ class RoutePlanner:
         self.cover = {}                  # cell -> set(target index)
         self.penalty = {}                # (cell, i) -> seconds
         for i, t in enumerate(self.targets):
+            txy = (t["x_m"], t["y_m"])
             for c, _, seen in firing_cells(graph, t, tile, max_shoot_m, exclude.get(t.get("id"), ())):
                 self.cover.setdefault(c, set()).add(i)
-                if not seen:
-                    self.penalty[(c, i)] = self.cost["unseen_s"]
+                pen = 0.0 if seen else self.cost["unseen_s"]
+                if cell_view_deg(c, txy, tile, graph.nx, graph.ny, open_test(graph.open)) > FRONTAL_DEG:
+                    pen += self.cost["oblique_s"]      # slanted view: shape unsure, may need a re-aim
+                if pen:
+                    self.penalty[(c, i)] = pen
         self.reachable_targets = set().union(*self.cover.values()) if self.cover else set()
         self._dist_cache = {}
 
@@ -331,27 +471,49 @@ class RoutePlanner:
 
     def evaluate(self, stops, start, heading):
         """Stops [(cell, [target idx])] in order -> time, moves, turns, full cell path.
-        Every algorithm's stops are scored with this same model."""
+        Every algorithm's stops are scored with this same model: one Dijkstra through the
+        whole stop sequence over (stops done, cell, heading), so the direction the robot
+        arrives in at a stop is chosen for the whole route, not leg by leg."""
         c = self.cost
-        pos, h = tuple(start), heading
-        total, moves, turns, route = 0.0, 0, 0, [tuple(start)]
-        for cell, idx in stops:
-            lg = self.leg(pos, h, cell)
-            if lg is None:
-                return None
-            secs, p, h2 = lg
-            hh = h
-            for a, b in zip(p, p[1:]):
-                d = next(k for k, m in MOVES.items() if m == (b[0] - a[0], b[1] - a[1]))
-                turns += (d - hh) % 4 != 0
-                hh = d
-            moves += len(p) - 1
-            total += secs
-            route += p[1:]
-            h = h2
-            total += c["stop_s"] + sum(c["aim_s"] + self.penalty.get((tuple(cell), i), 0.0) for i in idx)
-            pos = tuple(cell)
-        return {"time_s": round(total, 1), "moves": moves, "turns": turns, "route": route}
+        stops = [(tuple(cell), idx) for cell, idx in stops]
+        if not stops:
+            return {"time_s": 0.0, "moves": 0, "turns": 0, "route": [tuple(start)]}
+        aim = [c["stop_s"] + sum(c["aim_s"] + self.penalty.get((cell, i), 0.0) for i in idx)
+               for cell, idx in stops]
+        s0 = (0, tuple(start), heading)
+        best, prev, heap, n, end = {s0: 0.0}, {s0: None}, [(0.0, 0, s0)], 0, None
+        while heap:
+            t, _, st = heapq.heappop(heap)
+            if t > best.get(st, 1e18):
+                continue
+            k, cell, h = st
+            if k == len(stops):
+                end = st
+                break
+            nxt = []
+            if cell == stops[k][0]:
+                nxt.append(((k + 1, cell, h), aim[k]))
+            for d, nb, extra in self._edges(cell):
+                nxt.append(((k, nb, d), turn_cost(h, d, c) + c["move_s"] + extra))
+            for s2, dt in nxt:
+                nt = t + dt
+                if nt < best.get(s2, 1e18):
+                    best[s2], prev[s2] = nt, st
+                    n += 1
+                    heapq.heappush(heap, (nt, n, s2))
+        if end is None:
+            return None
+        chain = [end]
+        while prev[chain[-1]] is not None:
+            chain.append(prev[chain[-1]])
+        chain.reverse()
+        route, moves, turns = [chain[0][1]], 0, 0
+        for a, b in zip(chain, chain[1:]):
+            if b[1] != a[1]:
+                route.append(b[1])
+                moves += 1
+                turns += (b[2] - a[2]) % 4 != 0
+        return {"time_s": round(best[end], 1), "moves": moves, "turns": turns, "route": route}
 
     def restrict_to(self, start):
         """Only cells the robot can reach from start can be firing spots."""
@@ -514,13 +676,16 @@ class RoutePlanner:
             if mask == full:
                 goal = st
                 break
-            # shoot everything this cell covers that is not shot yet
+            # shoot some of what this cell covers: any subset (a slanted card may be cheaper
+            # to shoot face-on from a later stop), all of them when there are many
             new = [i for i in self.cover.get(cell, ()) if not mask & bit[i]]
-            if new:
+            subsets = ([[i for k, i in enumerate(new) if sm >> k & 1] for sm in range(1, 1 << len(new))]
+                       if len(new) <= 5 else [new])
+            for sub in subsets:
                 m2 = mask
-                for i in new:
+                for i in sub:
                     m2 |= bit[i]
-                nt = t + c["stop_s"] + sum(c["aim_s"] + self.penalty.get((cell, i), 0.0) for i in new)
+                nt = t + c["stop_s"] + sum(c["aim_s"] + self.penalty.get((cell, i), 0.0) for i in sub)
                 s2 = (cell, h, m2)
                 if nt < best.get(s2, 1e18):
                     best[s2], prev[s2] = nt, st
@@ -539,8 +704,13 @@ class RoutePlanner:
         while prev[chain[-1]] is not None:
             chain.append(prev[chain[-1]])
         chain.reverse()
-        order = [chain[k][0] for k in range(1, len(chain)) if chain[k][2] != chain[k - 1][2]]
-        return self._stops_from_order(order)
+        # the stops with exactly the targets chosen there (not "everything it covers")
+        stops = []
+        for k in range(1, len(chain)):
+            gained = chain[k][2] & ~chain[k - 1][2]
+            if gained:
+                stops.append((chain[k][0], [i for i in idx if gained & bit[i]]))
+        return stops
 
     ALGORITHMS = (("greedy nearest", "greedy_nearest"), ("greedy cover", "greedy_cover"),
                   ("DFS branch&bound", "dfs_branch_bound"), ("BFS state search", "bfs_state"),

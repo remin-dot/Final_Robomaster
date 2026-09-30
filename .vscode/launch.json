@@ -10,6 +10,44 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "IR sensor calibration (demo)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/sharp_calibrate.py",
+            "args": [
+                "--demo"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "IR sensor calibration (robot)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/sharp_calibrate.py",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Sensor check: which port has which sensor (robot)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/sensor_check.py",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Card colour calibration (robot camera)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/color_calibrate.py",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Robot - connect now (round 1)",
             "type": "debugpy",
             "request": "launch",

@@ -132,13 +132,153 @@ targets. After every stop, blocked passage or miss it plans again from where the
 robot is. The comparison is in the log and in `round2_targets.json`
 (`route_plan`). On 183 random mazes the exact Dijkstra route was never beaten.
 
+**IR sensors - two pairs:**
+
+| | left | right | |
+|---|---|---|---|
+| Sharp GP2Y0A41 (sides, analog) | adaptor 1, port 2 | adaptor 2, port 1 | calibrate: `sharp_ir` |
+| IR obstacle modules (front corners, ~45 deg, on/off) | adaptor 1, port 1 | adaptor 2, port 2 | no calibration: `ir_corner` |
+
+While driving: a front corner module that sees a wall -> slide away and slow
+down; both -> a wall right in front: stop (and do not start a move). The side
+Sharps keep the robot off the side walls. Calibrate the Sharps with:
+
+```bash
+python3 src/sharp_calibrate.py          # robot (close the mission panel first)
+python3 src/sharp_calibrate.py --demo   # no robot: sliders simulate the sensors
+```
+
+Each adaptor port has an analog pin and a digital pin; one request returns both.
+The obstacle modules' signal is on the **digital** pin (their analog pin only floats
+~300-400); `ir_corner.signal: auto` finds which pin switches, `active_low: true` =
+LOW means wall (standard modules, LED on). A Sharp stuck near 0 V (raw < 70) is
+reported as NO SIGNAL (panel, log). To see which port really has which sensor:
+
+```bash
+.venv/bin/python src/sensor_check.py      # live table: analog, digital, range seen, what it looks like
+```
+
+Hold a flat white board 5, 10, 15, 20 cm straight out from each Sharp's face and
+press Record; the panel fits a distance curve (a port that only switches on/off
+is not a Sharp - check the port). The corner modules are shown live at the
+bottom (clear / WALL): turn their screws until WALL shows at ~5 cm. **Save**
+writes `sharp_ir` in settings.yaml (the `ir_corner` section is left alone).
+
+**Start anywhere:** before round 1, click a cell on the map to put the start
+there, click it again to turn which way the robot faces (N = up the map, then E,
+S, W); **Save** on the map strip stores it (`grid_map.start`). The robot's real
+heading at the start becomes that map direction; round 2 reads it from the
+round-1 file.
+
 **Between rounds:** when a round ends the robot is released
-(`movement.release_after_round`): the gimbal motors sleep so it can be turned
-straight by hand, and no more drive commands are sent - lift the robot and carry
-it to the start (the SDK has no free-wheel command, so the wheels may still
-resist being pushed). **Start round** wakes it; the round then re-centres the
-gimbal on the chassis and takes the direction it faces as north. Actions tab:
-**Release robot** / **Wake robot** to do it by hand.
+(`movement.release_after_round`): wheels and gimbal get a last "stand still",
+robot mode goes to FREE (chassis and gimbal no longer follow each other, so
+turning one by hand does not move the other), the gimbal motors sleep so it can
+be turned straight by hand, the LEDs go dim blue, and no more commands are sent.
+The SDK has no wheel torque-off command, so the wheels may still resist being
+pushed: lift the robot to carry it to the start. **Start round** wakes it (LEDs
+green); the round then re-centres the gimbal on the chassis and takes the
+direction it faces as north. Actions tab: **Release robot** / **Wake robot** to
+do it by hand.
+
+**Driving (slide on straights, turn at corners):** on a plain straight stretch
+(both blocks have the same, known edges on each side: wall + wall or open + open)
+the mecanum wheels slide sideways / backwards without turning (`movement.strafe_moves`);
+the gimbal points the ToF and camera the way the robot drives to guard it. Where a
+wall ends, at a doorway, or next to an edge not known yet, the robot turns to face
+the way instead, so the two front-corner IR modules watch its corners. Moves run at
+`cell_speed` 0.45 m/s with a smooth braking stop. After every scan the robot
+slides back to the middle of its block from the ToF readings (`recenter`,
+`center_tof_mm`: check that value on the robot - the ToF reading to a wall of the
+block with the robot centred), so odometry drift and sideways slip do not add up.
+Set `strafe_moves: false` to go back to turning (then at up to `turn_max_dps`).
+
+**Exploring (round 1):** cards hang on walls, so the robot does not need to stand in
+every block - it needs every *wall face* seen well (closer than `vision.see_range_m`,
+in the picture, at most `see_max_view_deg` off face-on, nothing in between). A block
+is visited only while one of its wall faces is unseen or one of its edges unknown.
+Long ToF readings also tell where walls further on are (1.4 m down an open way =
+one more open block, then a wall) without driving there; what a scan saw directly
+always wins. Next block = the nearest (fewest moves) still worth a visit, ties by
+`explore_order` relative to how the robot came into its block (side blocks first),
+reached by the cheapest route. The way it came in is not scanned again, the gimbal
+sweeps once from one side to the other, and it stops exploring when nothing is left
+- or when the time left is only what the route planner needs to go and shoot the
+cards found (+ `shooting.reserve_margin_s`). On the last run's 6x6 (simulated): 25
+blocks visited instead of 36, 34 moves instead of 56, 0 chassis turns instead of 40.
+
+A move that stops more than half-way into the next block with a wall close ahead
+(`movement.arrive_tof_mm`) has arrived - that is the far wall of a dead-end block.
+
+**Close look:** in a block that holds a card (or next to one that needs checking,
+or where half a card was seen) the camera looks 10 deg down (`vision.verify_pitch_deg`)
+at the 4 walls (4 looks cover the block with the 96 deg lens), so a second card on
+the opposite wall is found too. A card closer than `shooting.min_shoot_m` is shot
+after sliding a few cm away (`back_off_max_m`).
+
+**Colour detection:** the white foam walls are the colour reference (the picture is
+white-balanced on them, `vision.white_balance`), and a card must hang on white wall:
+most of what is around it has to be neutral (`min_neutral_around_card`) - that
+drops tape on mats, clothes, markers in the room, robot parts. Calibrate the card
+colours on the real arena under the real light:
+
+```bash
+.venv/bin/python src/color_calibrate.py                  # robot camera (close the mission panel first)
+.venv/bin/python src/color_calibrate.py --image capture_*.jpg   # or saved pictures
+```
+
+1-4 pick the colour, click on cards of that colour (near, far, lit, in shade), M
+shows what the range picks up, S saves `config/color_config.json`.
+
+**Square vs rectangle:** a card seen at a slant looks narrower (width x cos of
+the angle), so a wide rect looks square and a square looks tall. The panel works
+out the angle from the wall the card hangs on (map) and undoes it, trying each
+square/rect guess because the distance comes from the card height (6 / 7 / 9 cm).
+Only a real slant (over `slant_fix_min_deg`) is corrected, with the detector's own
+cut-offs. Every sighting votes for a shape, face-on views count far more. The
+decider is the ToF: when the gimbal is locked on a card the ToF hits it, and its
+real height comes out (6 cm wide rect, 7 cm square, 9 cm tall rect - the height
+does not change at a slant). A square or rectangle gets a bead only when its shape
+is sure (ToF-measured, or seen within 35 deg of face-on) and that kind is selected
+- a card the ToF shows is a kind not selected is never shot.
+
+**Maybe-cards:** a card-sized, card-coloured blob on white wall that is cut by the
+picture edge (too close) or has an odd outline is never shot as it is - it is shown
+as "colour shape ?". Seen in the regular scan it only earns the block a close look;
+in the close look the camera points straight at it so the whole card is in view; if
+still unclear, the robot goes once per block to the next block from where that wall
+is seen face-on (~0.9 m) and looks back. A place that turned out not to be a card is
+remembered and not checked again.
+
+**Hit until it falls:** after each bead the robot looks at the card again
+(`shooting.fall_wait_s`). Still standing -> re-aim and fire again, up to
+`shooting.max_shots_per_target` (3); gone -> next target. It only fires again at the
+same whole card, never at a "?" blob. Turning **Blaster armed** off during a round
+needs a second click within 3 s. Aiming: the barrel sits below
+the camera, so it aims up by atan(`barrel_below_camera_m` / distance) plus the trim
+`aim_pitch_offset_deg` (fine-tune with Aim trim in the panel and Save). The lock
+window grows with the card's size in the picture, and a gimbal stuck at its pitch
+limit still fires when the barrel line is on the card.
+
+**One card, one entry:** sightings of one card merge with a radius that grows with
+distance (far views are less exact), duplicates that drift together are joined, and
+a card already hit is never shot again as a "new" one. Every round also saves its
+full log as `roundN_log.txt`.
+
+**Shooting rule:** a card is shot only when it is in the robot's block or the
+block right next to it, straight ahead of the gimbal (not diagonal) with no wall
+in between - never across a block (`shooting.reach_cells: 1`). From the next block
+the card must also sit straight in line - within `straight_band_m` (0.2 m) of the
+robot's row / column line, seen at most `max_shot_view_deg` (55 deg) slanted. A card
+at a hard angle (near a corner of its block, or edge-on) is shot from inside its own
+block: the robot goes there, looks down (`vision.verify_pitch_deg`), slides a few cm
+away if it is closer than `min_shoot_m`, and fires. A card seen from
+further away is put on the map and shot later from beside it. One block can hold
+several cards (different kinds, or two of the same kind side by side): each one
+is mapped and shot. If the aim loses a card for a moment (blur after a big gimbal
+move) it waits up to `shooting.lost_retries` frames before giving up. At the end
+of round 1, every selected card that was found but not hit is visited and shot
+from the block next to it while time is left (`shooting.mop_up_round1`).
 
 **Custom map:** Actions tab -> **Map WxH...** (or `g`): type e.g. `5x4`
 (5 wide x 4 high) or pick a preset, click a cell to set the start, **SAVE** -
@@ -150,9 +290,9 @@ limit, a progress bar, and the split time of every hit (also in
 when the time is up (10:00 / 5:00).
 
 **Round 2** loads `round1_targets.json` (walls, open passages, target
-positions); `src/route_planner.py` picks, for each designated target, the
-nearest cell within range with a clear line of sight (cells the target was
-seen from in round 1 first). The robot drives there, points the gimbal at the
+positions); `src/route_planner.py` picks, for each designated target, a
+firing cell in the target's block or right next to it with no wall between
+(cells the target was seen from in round 1 first). The robot drives there, points the gimbal at the
 saved position, sweeps +-30 deg if needed and shoots. A blocked move becomes a
 wall and the route is replanned; up to 3 firing cells are tried per target.
 Put the robot on the same start cell, facing the same way as in round 1.
@@ -163,7 +303,8 @@ Put the robot on the same start cell, facing the same way as in round 1.
   card, floor reflections, blaster barrel) are ignored. Distance comes from the
   plate height (pinhole model) and is confirmed with the gimbal ToF when centred.
 * `src/target_shooter.py` - centres the target with the gimbal, checks the
-  <= 2 tile range, then fires.
+  range, then fires (the chassis only calls it for a card in this block or the
+  next one).
 * At the end of each round `data/raw/run1/roundN_map.png` (path + targets) and
   `roundN_targets.json` are saved.
 

@@ -12,7 +12,7 @@ main thread (pygame on macOS requires that).
                      Pause / Resume, Finish, Save, STOP, Disconnect, Theme
     Camera           live view + segmentation (Overlay / Mask / Raw)
     Bottom           Sensors (ToF + Sharp), Detections + log, Aim HUD
-    Right            map, tabs Targets / Select / Actions
+    Right            map, tabs Targets / Select / Actions / Vision
 
 Keys: Space = start / STOP, P = pause, M = camera view, G = map editor,
 S = screenshot, Q / Esc = quit (Esc first closes a dialog or the editor).
@@ -257,6 +257,17 @@ class PygamePanel:
         if self.ui.focus is not None:
             return  # typing into a field
         ctl, p = self.ctl, self.p
+        rv = getattr(p, "_trainer", None)
+        if rv is not None and rv.review is not None:
+            keys = {pygame.K_1: "circle", pygame.K_2: "square", pygame.K_3: "rect_wide", pygame.K_4: "rect_tall",
+                    pygame.K_5: "none", pygame.K_d: "delete"}
+            for e in events:
+                if e.type == pygame.KEYDOWN:
+                    if e.key in keys and rv.review["sel"]:
+                        rv.review_assign(keys[e.key])
+                    elif e.key == pygame.K_ESCAPE:
+                        rv.review = None
+            return
         for e in events:
             if e.type != pygame.KEYDOWN:
                 continue
@@ -283,6 +294,8 @@ class PygamePanel:
                 p.open_editor()
             elif k == pygame.K_s:
                 self.screenshot()
+            elif k == pygame.K_c and self.tab == "vision":
+                self.capture_now()
 
     def _quit(self):
         self.p.abort.set()
@@ -307,7 +320,10 @@ class PygamePanel:
             self.draw_connect()
         else:
             self.draw_header()
-            self.draw_camera()
+            if getattr(self.p, "_trainer", None) is not None and self.p._trainer.review is not None:
+                self.draw_review()
+            else:
+                self.draw_camera()
             y = self.cam_rect.bottom + 8
             self.draw_sensors(pygame.Rect(10, y, 290, H - y - 10))
             self.draw_detections(pygame.Rect(308, y, 262, H - y - 10))
@@ -527,7 +543,22 @@ class PygamePanel:
         ir_max = float(tel.get("ir_max_cm", 30.0))
         wall = float(tel.get("ir_wall_cm", 16.9))
         side_len = 46
-        for side, key, name in ((-1, "ir_left_cm", "L"), (1, "ir_right_cm", "R")):
+        # front-corner IR obstacle modules (on/off): a short diagonal at each front corner
+        for side, key, name in ((-1, "corner_left_near", "FL"), (1, "corner_right_near", "FR")):
+            state = tel.get(key)
+            if state is None:
+                continue                                   # not fitted / no reading
+            x0, y0 = cx + side * 13, body.top + 2
+            xe, ye = int(x0 + side * 22), int(y0 - 22)
+            c = "bad" if state else "ok"
+            pygame.draw.line(self.screen, ui.col(c), (x0, y0), (xe, ye), 6)
+            ui.label(f"{name} {'WALL' if state else 'clear'}", xe + side * 3, ye - 13, "xs", c,
+                     "left" if side > 0 else "right")
+            if state:
+                pygame.draw.circle(self.screen, ui.pal["bad"], (x0, y0), 5)
+        # Sharp distance sensors on the sides: horizontal bars
+        side_iter = ((-1, "ir_left_cm", "L"), (1, "ir_right_cm", "R"))
+        for side, key, name in side_iter:
             v = tel.get(key)
             x0 = cx + side * 15
             xe = x0 + side * side_len
@@ -540,6 +571,10 @@ class PygamePanel:
                 pygame.draw.line(self.screen, ui.pal["text"], (wx, cy - 7), (wx, cy + 7), 1)
                 ui.label(f"{v:.1f} cm", (x0 + xe) // 2, cy + 12, "xs", c, "center")
             ui.label(name, xe, cy - 22, "xs", "muted", "center")
+        # a sensor that gives no signal (cable / port / power): say so right here
+        warn = tel.get("sensor_warn")
+        if warn:
+            ui.label("! " + warn, r.x + 12, r.bottom - 20, "xs", "bad", maxw=r.w - 24)
         tof = tel.get("tof_mm")
         top = r.y + 38
         pygame.draw.line(self.screen, ui.pal["line"], (cx, body.top - 2), (cx, top), 8)
@@ -641,11 +676,36 @@ class PygamePanel:
     def draw_map(self):
         ui, p = self.ui, self.p
         r = self.map_rect
+        editing_start = not p.editing and p.can_edit_start()
+        if editing_start:   # handle the click first, so this frame already shows the new start
+            strip = pygame.Rect(r.x + 6, r.bottom - 36, r.w - 12, 30)
+            if ui.clicked and r.collidepoint(ui.mouse) and not strip.collidepoint(ui.mouse):
+                c = p.map.cell_at(ui.mouse[0] - r.x, ui.mouse[1] - r.y, r.w)
+                if c:
+                    p.click_start(c)
         img = p._editor_preview(r.w) if p.editing else p.map.render(r.w, fov_deg=p.detector.hfov_deg)
         self.screen.blit(bgr_to_surface(img), r.topleft)
         pygame.draw.rect(self.screen, ui.pal["line"], r, 1)
         if p.editing:
             self.draw_editor(r)
+        elif editing_start:
+            self.draw_start_strip(r)
+
+    def draw_start_strip(self, r):
+        """The robot can be put down anywhere: click a map cell = start there,
+        click the start cell again = turn which way it faces (N E S W)."""
+        ui, p = self.ui, self.p
+        strip = pygame.Rect(r.x + 6, r.bottom - 36, r.w - 12, 30)
+        s = pygame.Surface(strip.size, pygame.SRCALPHA)
+        s.fill((*ui.pal["panel"], 225))
+        self.screen.blit(s, strip.topleft)
+        m = p.map
+        ui.label(f"Start {tuple(m.start)} facing {'NESW'[m.start_heading]}", strip.x + 8, strip.y + 7, "sb", "ok")
+        ui.label("click cell = move, again = turn", strip.x + 160, strip.y + 8, "xs", "muted")
+        dirty = getattr(p, "_start_dirty", False)
+        if ui.button(pygame.Rect(strip.right - 62, strip.y + 3, 56, 24), "Save", "primary" if dirty else "normal",
+                     font="xs"):
+            p.save_start()
 
     def draw_editor(self, r):
         """Custom map size (e.g. 5x4) + start cell, saved to settings.yaml."""
@@ -678,15 +738,127 @@ class PygamePanel:
     def draw_tabs(self, r):
         ui, p = self.ui, self.p
         ui.card(r)
-        for i, (key, lbl) in enumerate((("targets", "Targets"), ("select", "Select"), ("actions", "Actions"))):
-            if ui.button(pygame.Rect(r.x + 8 + i * 92, r.y + 8, 86, 28), lbl, on=self.tab == key):
+        for i, (key, lbl) in enumerate((("targets", "Targets"), ("select", "Select"), ("actions", "Actions"),
+                                        ("vision", "Vision"))):
+            if ui.button(pygame.Rect(r.x + 8 + i * 80, r.y + 8, 76, 28), lbl, on=self.tab == key):
                 self.tab = key
         n = len(p.selected)
         # more than the sheet's 4 kinds: every extra kind risks a -1 wrong-target shot
-        ui.label(f"shooting {n} kind{'s' if n != 1 else ''}" + ("  - check!" if n > 4 else ""),
+        ui.label(f"{n} kind{'s' if n != 1 else ''}" + (" !" if n > 4 else ""),
                  r.right - 12, r.y + 15, "sb", "bad" if n == 0 else ("warn" if n > 4 else "accent"), "right")
         inner = pygame.Rect(r.x + 10, r.y + 44, r.w - 20, r.h - 52)
-        {"targets": self.tab_targets, "select": self.tab_select, "actions": self.tab_actions}[self.tab](inner)
+        {"targets": self.tab_targets, "select": self.tab_select, "actions": self.tab_actions,
+         "vision": self.tab_vision}[self.tab](inner)
+
+    # ---------------------------------------------------------------- vision (box classifier)
+    def tab_vision(self, r):
+        """Stage-3 box classifier: examples, model, auto label / train, review the unsure."""
+        from vision_trainer import counts
+        ui, p, ctl = self.ui, self.p, self.ctl
+        tr = p.trainer
+        idle = not ctl.running and not tr.busy
+        n = counts()
+        short = (("circle", "circle"), ("square", "square"), ("rect_wide", "wide"), ("rect_tall", "tall"),
+                 ("none", "none"), ("unsure", "unsure"))
+        ui.label("examples: " + "  ".join(f"{s_} {n[c]}" for c, s_ in short), r.x, r.y, "xs", "text", maxw=r.w)
+        info = tr.info or {}
+        if p.detector.roi_clf is not None:
+            ui.label("model in use  " + str(info.get("note", "(trained by hand)")), r.x, r.y + 18, "xs", "ok", maxw=r.w)
+        else:
+            ui.label("no model - shapes by area only" + (f"  ({info['note']})" if info.get("note") else ""),
+                     r.x, r.y + 18, "xs", "muted", maxw=r.w)
+        st = (f"[{tr.busy}…] " if tr.busy else "") + (tr.status or "record a round, then Label + train")
+        ui.label(st, r.x, r.y + 36, "xs", "warn" if tr.busy else "muted", maxw=r.w)
+        bw = (r.w - 12) // 3
+        y = r.y + 56
+        for i, (lbl, cb, kind) in enumerate((("Auto label", tr.label_now, "normal"),
+                                             ("Train", tr.train_now, "normal"),
+                                             ("Label + train", tr.auto_now, "primary"))):
+            if ui.button(pygame.Rect(r.x + i * (bw + 6), y, bw, 28), lbl, kind, enabled=idle):
+                cb()
+        y += 34
+        bw4 = (r.w - 18) // 4
+        for i, (lbl, cb, kind, en) in enumerate(((f"Review ({n['unsure']})", tr.start_review, "normal", idle),
+                                                 ("Clean data", tr.clean_now, "normal", idle),
+                                                 ("Colour samples", tr.colour_samples_now, "normal", idle),
+                                                 ("Remove model", tr.delete_model, "danger",
+                                                  idle and p.detector.roi_clf is not None))):
+            if ui.button(pygame.Rect(r.x + i * (bw4 + 6), y, bw4, 28), lbl, kind, enabled=en, font="xs"):
+                cb()
+        y += 34
+        v = ui.checkbox(pygame.Rect(r.x, y, r.w - 60, 22), p._auto_after_round(),
+                        "after each round: label + train automatically")
+        if v != p._auto_after_round():
+            p._toggle_auto_after_round()
+        # capture from the camera: put ONE card in the middle of the view, pick its shape, Capture (C)
+        y += 28
+        chips = (("auto", "auto"), ("circle", "circle"), ("square", "square"), ("rect_wide", "wide"),
+                 ("rect_tall", "tall"), ("none", "not card"))
+        cw_ = 44
+        for i, (key, lbl) in enumerate(chips):
+            if ui.button(pygame.Rect(r.x + i * (cw_ + 3), y, cw_ + (10 if key == "none" else 0), 26), lbl,
+                         on=tr.capture_label == key, font="xs"):
+                tr.capture_label = key
+        cx0 = r.x + 6 * (cw_ + 3) + 12
+        if ui.button(pygame.Rect(cx0, y, r.right - cx0 - 40, 26), "Capture", "primary",
+                     enabled=not tr.busy and self.ctl.connected):
+            self.capture_now()
+        if tr.last_capture is not None:
+            self.screen.blit(pygame.transform.scale(bgr_to_surface(tr.last_capture), (32, 32)),
+                             (r.right - 34, y - 3))
+
+    def capture_now(self):
+        frame, _, ts, _ = self.p.worker.latest()
+        if frame is None or time.time() - ts > 1.0:
+            self.p.trainer._say("no live camera picture - connect the camera first")
+            return
+        self.p.trainer.capture(frame.copy(), self.p.trainer.capture_label)
+
+    def draw_review(self):
+        """Review grid over the camera view: click crops, then a label (keys 1-5, D delete)."""
+        ui, p = self.ui, self.p
+        tr = p.trainer
+        rv = tr.review
+        r = self.cam_rect
+        ui.rrect(r, "panel", 8)
+        pygame.draw.rect(self.screen, ui.pal["line"], r, 1, border_radius=8)
+        cols, rows, tile = 11, 5, 74
+        per = cols * rows
+        items = rv["items"]
+        pages = max(1, (len(items) + per - 1) // per)
+        rv["page"] = min(rv["page"], pages - 1)
+        ui.label(f"Review '{rv['label']}': {len(items)} crops  (page {rv['page'] + 1}/{pages}) - click to select, "
+                 "then a label (keys 1-5, D delete)", r.x + 12, r.y + 10, "s", "text", maxw=r.w - 24)
+        cache = self.__dict__.setdefault("_thumbs", {})
+        for j, path in enumerate(items[rv["page"] * per:(rv["page"] + 1) * per]):
+            tx, ty = r.x + 12 + (j % cols) * tile, r.y + 36 + (j // cols) * tile
+            surf = cache.get(path)
+            if surf is None:
+                img = cv2.imread(path)
+                img = cv2.resize(img, (64, 64)) if img is not None else np.full((64, 64, 3), 200, np.uint8)
+                surf = cache[path] = bgr_to_surface(img)
+            self.screen.blit(surf, (tx, ty))
+            rect = pygame.Rect(tx, ty, 64, 64)
+            if path in rv["sel"]:
+                pygame.draw.rect(self.screen, ui.pal["bad"], rect.inflate(6, 6), 3, border_radius=4)
+            if ui.hit(rect) and ui.clicked:
+                rv["sel"] ^= {path}
+        by = r.bottom - 40
+        bw = 84
+        for i, (lbl, key) in enumerate((("1 circle", "circle"), ("2 square", "square"), ("3 wide", "rect_wide"),
+                                        ("4 tall", "rect_tall"), ("5 not card", "none"), ("D delete", "delete"))):
+            if ui.button(pygame.Rect(r.x + 12 + i * (bw + 4), by, bw, 30), lbl,
+                         "danger" if key == "delete" else "normal", enabled=bool(rv["sel"]), font="xs"):
+                tr.review_assign(key)
+        bx = r.x + 12 + 6 * (bw + 4) + 8
+        if ui.button(pygame.Rect(bx, by, 56, 30), "< page", font="xs"):
+            rv["page"] = max(0, rv["page"] - 1)
+        if ui.button(pygame.Rect(bx + 60, by, 56, 30), "page >", font="xs"):
+            rv["page"] += 1
+        if ui.button(pygame.Rect(bx + 120, by, 44, 30), "all", font="xs"):
+            rv["sel"] = set(items[rv["page"] * per:(rv["page"] + 1) * per])
+        if ui.button(pygame.Rect(r.right - 90, by, 78, 30), "Done", "primary"):
+            tr.review = None
 
     def tab_targets(self, r):
         ui, p = self.ui, self.p
@@ -774,9 +946,17 @@ class PygamePanel:
                      enabled=idle and p.round_no == 1):
             p.open_editor()
         y += 36
-        armed = ui.checkbox(pygame.Rect(r.x, y, half, 26), ctl.armed, "Blaster armed")
+        # turning the blaster OFF during a round needs a second click within 3 s (last run it
+        # was switched off by accident at 4:30 and nothing could be hit after that)
+        confirm = time.time() - getattr(self, "_disarm_click", 0.0) < 3.0
+        label = "Blaster armed" if not confirm else "Click again: blaster OFF?"
+        armed = ui.checkbox(pygame.Rect(r.x, y, half, 26), ctl.armed, label)
         if armed != ctl.armed:
-            ctl.set_armed(armed)
+            if not armed and ctl.running and not confirm:
+                self._disarm_click = time.time()
+            else:
+                self._disarm_click = 0.0
+                ctl.set_armed(armed)
         if ui.button(pygame.Rect(r.x + half + 6, y, half, 28), "Calibrate: card at 1 m", enabled=idle):
             ctl.calibrate_distance()
         y += 36
@@ -800,13 +980,13 @@ class PygamePanel:
             if ui.button(pygame.Rect(r.x + 62 + i * (bw + 5), y, bw, 26), lbl, font="xs"):
                 cb()
         y += 32
-        ui.label(f"trim pitch {float(sh.get('aim_pitch_offset_deg', -3.5)):+.1f}°  "
+        ui.label(f"trim pitch {float(sh.get('aim_pitch_offset_deg', 0.0)):+.1f}°  "
                  f"yaw {float(sh.get('aim_yaw_offset_deg', 0.0)):+.1f}°   (shots high -> Down)", r.x, y, "xs", "muted")
         y += 18
         if ctl.released:
-            if ui.button(pygame.Rect(r.x, y, r.w, 28), "Wake robot (gimbal motors on)", "primary", enabled=idle):
+            if ui.button(pygame.Rect(r.x, y, r.w, 28), "Wake robot (motors on, gimbal centred)", "primary", enabled=idle):
                 ctl.wake()
-        elif ui.button(pygame.Rect(r.x, y, r.w, 28), "Release robot (move it / turn the gimbal by hand)",
+        elif ui.button(pygame.Rect(r.x, y, r.w, 28), "Release robot (stop wheels + gimbal, free mode, gimbal limp)",
                        enabled=robot and idle):
             ctl.release()
         if not robot:

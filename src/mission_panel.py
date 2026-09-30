@@ -38,6 +38,7 @@ import numpy as np
 
 from target_vision import (COLORS, DEFAULT_CATALOGUE, DRAW_BGR, SHAPE_LABEL, SHAPES, TargetDetector,
                            draw_detections, draw_ignored, kind_label, kind_of, segmentation_mask, split_kind)
+from route_planner import RECT_FAMILY
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -126,6 +127,9 @@ class AimState:
 # ======================================================================
 # camera + detection worker
 # ======================================================================
+SHAPES_ALL = ("circle", "square", "rect_wide", "rect_tall")
+
+
 class CameraWorker:
     """Two threads: `capture` keeps the newest frame at the stream rate (the
     view never waits for detection) and `detect` segments the newest frame
@@ -145,6 +149,18 @@ class CameraWorker:
         self.fps = 0.0
         self.det_fps = 0.0
         self.detect_ms = 0.0
+        # frames taken while the gimbal turns: motion_fn(frame time) -> None (still) or
+        # {"blur": (x px, y px), "g": (pitch, yaw) at the exposure}; their colour sightings
+        # (blur-tolerant, TargetDetector.detect_moving) go to motion_log
+        self.motion_fn = None
+        from collections import deque
+        self.motion_log = deque(maxlen=400)       # (frame time, gimbal (p, y), [sightings])
+        # frame recorder (offline colour tuning): a picture every record_every_s into record_dir,
+        # with meta_fn(frame time) -> dict (gimbal angle, cell, heading) in frames.csv
+        self.record_dir = None
+        self.record_every_s = 1.0
+        self.meta_fn = None
+        self._last_rec = 0.0
         self._threads = [threading.Thread(target=self._capture_loop, daemon=True),
                          threading.Thread(target=self._detect_loop, daemon=True)]
 
@@ -200,6 +216,35 @@ class CameraWorker:
                 continue
             t0 = time.time()
             dets = self.detector.detect(frame)
+            if self.record_dir and ts - self._last_rec >= self.record_every_s:
+                self._last_rec = ts
+                try:
+                    name = f"f_{ts:.2f}.jpg"
+                    cv2.imwrite(os.path.join(self.record_dir, name), frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+                    meta = self.meta_fn(ts) if self.meta_fn else {}
+                    cards = ";".join(f"{d.kind}@{d.bearing_deg:.1f}/{d.elevation_deg:.1f}" for d in dets if d.is_card)
+                    with open(os.path.join(self.record_dir, "frames.csv"), "a") as fh:
+                        fh.write(f"{name},{ts:.3f},{meta.get('pitch', '')},{meta.get('yaw', '')},"
+                                 f"{meta.get('cell', '')},{meta.get('heading', '')},{cards}\n")
+                except Exception:
+                    pass
+            mf = self.motion_fn
+            if mf is not None:
+                try:
+                    m = mf(ts)
+                    if m:
+                        bx, by = m["blur"]
+                        seen = [{"color": d.color, "bearing": d.bearing_deg, "elevation": d.elevation_deg,
+                                 "dist_m": d.distance_m, "kind": d.kind if d.is_card else None}
+                                for d in dets if (d.is_card or d.guess) and d.color in self.detector.card_colors]
+                        for mv in self.detector.detect_moving(frame, bx, by):
+                            if not any(x["color"] == mv["color"] and abs(x["bearing"] - mv["bearing"]) < 3
+                                       for x in seen):
+                                seen.append(dict(mv, kind=None))
+                        if seen:
+                            self.motion_log.append((ts, m["g"], seen))
+                except Exception:
+                    pass
             t1 = time.time()
             with self.lock:
                 self.detections = dets
@@ -223,6 +268,18 @@ class CameraWorker:
             time.sleep(0.01)
         with self.lock:
             return self.frame, list(self.detections)
+
+    def wait_det(self, after_ts, timeout=0.2):
+        """(capture time, detections) of the first frame captured after `after_ts`, or
+        (last time, last detections) when none came in time - no extra waiting beyond that."""
+        end = time.time() + timeout
+        while time.time() < end:
+            with self.lock:
+                if self.det_ts > after_ts:
+                    return self.det_ts, list(self.detections)
+            time.sleep(0.005)
+        with self.lock:
+            return self.det_ts, list(self.detections)
 
     def stop(self):
         self.running = False
@@ -249,9 +306,15 @@ class MissionMap:
         self.targets = {}            # color -> dict
         self.known = {}              # targets loaded from a previous round
         self.shots = []              # [(color, cell, t)]
+        self.edge_on = []            # cards seen too slanted to map: {color, x_m, y_m, cell, view, looked}
+        self.start_heading = 0       # which way the robot faces at the start: 0 N (up), 1 E, 2 S, 3 W
         self.traversed = set()       # edges the robot drove through: never a wall
         self.min_observations = 2    # sightings (scan stops) before a target counts
+        self.round_shape_min_observations = 3  # extra evidence for circle vs square
         self.same_card_m = 0.45      # same kind closer than this = the same card
+        self.same_card_other_shape_m = 0.3   # square / rect of one colour this close = one card seen slanted
+        self._log_shape = None       # (old id, new id) after a shape vote flipped
+        self.merged_log = []         # [(dropped id, kept id)] duplicates joined
         self.plan = []               # round 2: planned cell routes [[cell, ...], ...]
         self.plan_marks = []         # round 2: [(fire_cell, aim_deg, color)]
 
@@ -327,33 +390,107 @@ class MissionMap:
             walls = {e for e in self.walls if isinstance(e, frozenset)}
         return GridGraph(self.nx, self.ny, walls).line_of_sight(tuple(robot_cell), (x_m, y_m), self.tile)
 
-    def _find_card(self, kind, x_m, y_m, radius_m=None):
-        """Id of the mapped card of this kind nearest (x, y) within radius, or None."""
+    def in_reach(self, robot_cell, tid, reach=None):
+        """Shooting rule: the card is in the robot's block or the block right next to it
+        (3 x 3 around it, diagonals too - or the old straight-only "cross") with no known wall
+        between (route_planner.within_reach)."""
+        from route_planner import GridGraph, within_reach
+        with self.lock:
+            t = self.targets.get(tid)
+            if t is None or not t["sw"]:
+                return False
+            xy = (t["sx"] / t["sw"], t["sy"] / t["sw"])
+            walls = {e for e in self.walls if isinstance(e, frozenset)}
+        return within_reach(GridGraph(self.nx, self.ny, walls), robot_cell, xy, self.tile, reach)
+
+    def shot_quality(self, robot_cell, tid):
+        """(distance m from the block centre, view deg off face-on or None) of a shot at tid."""
+        with self.lock:
+            t = self.targets.get(tid)
+            if t is None or not t["sw"]:
+                return None, None
+            x, y = t["sx"] / t["sw"], t["sy"] / t["sw"]
+        c = ((robot_cell[0] + 0.5) * self.tile, (robot_cell[1] + 0.5) * self.tile)
+        return math.hypot(x - c[0], y - c[1]), self.card_view_deg(robot_cell, x, y)
+
+    def better_spot(self, robot_cell, tid, visited, good_m, good_view_deg, reach=None):
+        """A block the exploration still has to visit from where tid is a GOOD shot (near
+        and close to face-on) - or None. Firing from a poor spot now is then a waste: the
+        robot passes that block anyway and shoots it from there."""
+        from route_planner import GridGraph, within_reach
+        with self.lock:
+            t = self.targets.get(tid)
+            if t is None or not t["sw"]:
+                return None
+            xy = (t["sx"] / t["sw"], t["sy"] / t["sw"])
+            walls = {e for e in self.walls if isinstance(e, frozenset)}
+        g = GridGraph(self.nx, self.ny, walls)
+        seen = {tuple(v) for v in (visited or ())}
+        best = None
+        for x in range(self.nx):
+            for y in range(self.ny):
+                c = (x, y)
+                if c == tuple(robot_cell) or c in seen:
+                    continue
+                d, view = self.shot_quality(c, tid)
+                if d is None or d > good_m or d < 0.25 or view is None or view > good_view_deg:
+                    continue
+                if not within_reach(g, c, xy, self.tile, reach):
+                    continue
+                k = (view, d)
+                if best is None or k < best[0]:
+                    best = (k, c)
+        return best[1] if best else None
+
+    def _find_card(self, kind, x_m, y_m, radius_m=None, dist_m=None):
+        """Id of the mapped card of this kind nearest (x, y) within radius, or None.
+        A square / wide / tall card of the same colour close by is the same card too:
+        a slanted view can make one look like another (the shapes are then voted)."""
         radius_m = self.same_card_m if radius_m is None else radius_m
-        best, best_d = None, radius_m
+        color, shape = split_kind(kind)
+        best, best_d = None, None
         for tid, t in self.targets.items():
-            if t["kind"] != kind or not t["sw"]:
+            if not t["sw"] or t["color"] != color:
+                continue
+            same = t["shape"] == shape
+            if not same and not (shape in RECT_FAMILY and t["shape"] in RECT_FAMILY):
                 continue
             d = math.hypot(t["sx"] / t["sw"] - x_m, t["sy"] / t["sw"] - y_m)
-            if d <= best_d:
+            if dist_m is not None:   # this sighting's and the card's own best view set the error
+                e = max(dist_m, t.get("best_dist", dist_m))
+                lim = self._merge_radius(e, same)
+            else:
+                lim = radius_m if same else min(radius_m, self.same_card_other_shape_m)
+            if d <= lim and (best_d is None or d < best_d):
                 best, best_d = tid, d
         return best
 
-    def add_observation(self, color, shape, robot_cell, abs_deg, dist_m, weight=1.0):
+    def _merge_radius(self, dist_m, same_shape=True):
+        """How far apart two sightings of one card can land: a far sighting is less exact
+        (bearing and size errors grow with distance)."""
+        if same_shape:   # never as far as a block (0.6 m): two cards one block apart stay two
+            return min(0.5, max(0.3, 0.15 + 0.3 * dist_m))
+        return min(0.45, max(self.same_card_other_shape_m, 0.15 + 0.2 * dist_m))
+
+    def add_observation(self, color, shape, robot_cell, abs_deg, dist_m, weight=1.0, view_deg=0.0):
         """Project a detection onto the map (abs_deg: 0=north, 90=east) and merge it
-        with the same card seen before; a card of the same kind further away is a new one."""
+        with the same card seen before; a card of the same kind further away is a new one.
+        view_deg = how far from face-on the card was seen: the shape vote of a slanted
+        view counts little, so a face-on look decides square vs rectangle."""
         tx, ty = self.project(robot_cell, abs_deg, dist_m)
         w = weight / max(dist_m, 0.2)  # closer views are more reliable
         kind = kind_of(color, shape)
+        # wall unknown (None): the view counts half and never makes the shape "sure"
+        cos_v = 0.85 if view_deg is None else max(0.05, math.cos(math.radians(min(abs(view_deg), 89.0))))
         with self.lock:
-            tid = self._find_card(kind, tx, ty)
+            tid = self._find_card(kind, tx, ty, dist_m=dist_m)
             if tid is None:
-                n_same = sum(1 for t in self.targets.values() if t["kind"] == kind)
-                tid = kind if n_same == 0 else f"{kind} #{n_same + 1}"
+                tid = self._new_id(kind)
                 self.targets[tid] = {
                     "id": tid, "kind": kind, "color": color, "shape": shape,
                     "sx": 0.0, "sy": 0.0, "sw": 0.0, "n": 0, "shot": False, "first_seen": time.time(),
                     "seen_from": tuple(robot_cell), "best_dist": dist_m, "views": {},
+                    "votes": {}, "best_view_deg": 90.0,
                 }
             t = self.targets[tid]
             rc = tuple(robot_cell)
@@ -362,11 +499,145 @@ class MissionMap:
             t["sy"] += ty * w
             t["sw"] += w
             t["n"] += 1
-            t["confirmed"] = t["n"] >= self.min_observations
+            need = self.required_observations(shape)
+            t["confirmed"] = t["n"] >= need
+            votes = t.setdefault("votes", {})
+            votes[shape] = votes.get(shape, 0.0) + w * cos_v ** 4   # face-on views decide
+            if view_deg is not None:
+                t["best_view_deg"] = min(t.get("best_view_deg", 90.0), abs(view_deg))
+            elif dist_m < 0.6:   # wall unclear (corner) but close: count agreeing close looks
+                near = t.setdefault("near_unknown", {})
+                near[shape] = near.get(shape, 0) + 1
             if dist_m < t["best_dist"]:
                 t["best_dist"] = dist_m
                 t["seen_from"] = tuple(robot_cell)
-            return self._target_view(t)
+            win = max(votes, key=votes.get)
+            if win != t["shape"] and not t["shot"]:
+                old = t["id"]
+                tid = self._reshape(old, win)
+                self._log_shape = (old, tid)
+            tid = self.consolidate(tid)
+            return self._target_view(self.targets[tid])
+
+    def consolidate(self, tid=None):
+        """Two map entries that are really one card (a far first sighting landed off, the
+        next one started a new entry; both estimates moved together since): merge them.
+        Same colour, same shape - or square/rect when one of them is not sure of its shape -
+        closer than their sighting errors allow. Returns the id `tid` lives on as."""
+        from route_planner import FRONTAL_DEG
+        with self.lock:
+            merged = True
+            while merged:
+                merged = False
+                items = [t for t in self.targets.values() if t["sw"]]
+                for i, a in enumerate(items):
+                    for b in items[i + 1:]:
+                        if a["color"] != b["color"]:
+                            continue
+                        same = a["shape"] == b["shape"]
+                        if not same:
+                            unsure = (a.get("best_view_deg", 90) > FRONTAL_DEG or
+                                      b.get("best_view_deg", 90) > FRONTAL_DEG)
+                            if not (unsure and a["shape"] in RECT_FAMILY and b["shape"] in RECT_FAMILY):
+                                continue
+                        d = math.hypot(a["sx"] / a["sw"] - b["sx"] / b["sw"], a["sy"] / a["sw"] - b["sy"] / b["sw"])
+                        e = max(a.get("best_dist", 0.5), b.get("best_dist", 0.5))
+                        lim = self._merge_radius(e, same) if same else 0.4
+                        if d > lim:
+                            continue
+                        keep, drop = (a, b) if (a["shot"], a["n"]) >= (b["shot"], b["n"]) else (b, a)
+                        ids = (keep["id"], drop["id"])
+                        self._absorb(keep, drop)          # may rename keep (shape vote)
+                        if tid in ids:
+                            tid = keep["id"]
+                        self.merged_log.append((ids[1], keep["id"]))
+                        merged = True
+                        break
+                    if merged:
+                        break
+        return tid
+
+    def _absorb(self, keep, drop):
+        for k in ("sx", "sy", "sw"):
+            keep[k] += drop[k]
+        keep["n"] += drop["n"]
+        keep["shot"] = keep["shot"] or drop["shot"]
+        need = self.required_observations(keep["shape"])
+        keep["confirmed"] = keep.get("confirmed") or drop.get("confirmed") or keep["n"] >= need
+        for c, dd in drop.get("views", {}).items():
+            keep["views"][c] = min(dd, keep["views"].get(c, dd))
+        for sh, v in drop.get("votes", {}).items():
+            keep.setdefault("votes", {})[sh] = keep["votes"].get(sh, 0.0) + v
+        keep["best_view_deg"] = min(keep.get("best_view_deg", 90.0), drop.get("best_view_deg", 90.0))
+        if drop.get("best_dist", 9) < keep.get("best_dist", 9):
+            keep["best_dist"], keep["seen_from"] = drop["best_dist"], drop["seen_from"]
+        for k in ("verified", "swept"):
+            keep[k] = keep.get(k) or drop.get(k)
+        self.targets.pop(drop["id"], None)
+        self.shots = [(keep["id"] if sid == drop["id"] else sid, c, ts) for sid, c, ts in self.shots]
+        if not keep["shot"]:
+            win = max(keep["votes"], key=keep["votes"].get) if keep.get("votes") else keep["shape"]
+            if win != keep["shape"]:
+                self._reshape(keep["id"], win)
+
+    def _new_id(self, kind):
+        if kind not in self.targets:
+            return kind
+        n = 2
+        while f"{kind} #{n}" in self.targets:
+            n += 1
+        return f"{kind} #{n}"
+
+    def _reshape(self, tid, shape):
+        """The shape vote changed (e.g. a face-on look shows a wide rect, not a square):
+        the card gets its true kind and id."""
+        t = self.targets.pop(tid)
+        t["shape"] = shape
+        t["kind"] = kind_of(t["color"], shape)
+        t["id"] = self._new_id(t["kind"])
+        self.targets[t["id"]] = t
+        return t["id"]
+
+    def set_measured_shape(self, tid, shape):
+        """The ToF + pixel size measured this card's real shape: that settles it.
+        Returns the card's id (renamed if the shape changed)."""
+        with self.lock:
+            t = self.targets.get(tid)
+            if t is None:
+                return None
+            t.setdefault("votes", {})[shape] = t["votes"].get(shape, 0.0) + 50.0
+            t["measured"] = shape
+            if shape != t["shape"] and not t["shot"]:
+                return self._reshape(tid, shape)
+            return tid
+
+    def shape_sure(self, tid):
+        """Square / rectangle told apart: seen face-on (<= 35 deg) at least once. A circle
+        stays round-ish at a slant; the others swap (wide rect -> square -> tall rect)."""
+        from route_planner import FRONTAL_DEG
+        t = self.targets.get(tid)
+        if t is None:
+            return False
+        if t["shape"] not in RECT_FAMILY or t.get("best_view_deg", 90.0) <= FRONTAL_DEG or t.get("measured"):
+            return True
+        # card in a corner (its wall unclear): two close looks that all agree are enough
+        near = t.get("near_unknown", {})
+        return near.get(t["shape"], 0) >= 2 and len(near) == 1
+
+    def required_observations(self, shape):
+        return self.round_shape_min_observations if shape in ("circle", "square") else self.min_observations
+
+    def card_view_deg(self, robot_cell, x_m, y_m):
+        """How far from face-on a card at (x, y) is seen from this block's centre, or None
+        when the wall it hangs on is not clear (a known-open passage is never that wall)."""
+        from route_planner import card_normal, open_test, view_angle_deg
+        with self.lock:
+            opened = {e for e in self.open_edges | self.traversed if isinstance(e, frozenset)}
+        n = card_normal((x_m, y_m), self.tile, self.nx, self.ny, is_open=open_test(opened))
+        if n is None:
+            return None
+        c = ((robot_cell[0] + 0.5) * self.tile, (robot_cell[1] + 0.5) * self.tile)
+        return view_angle_deg(c, (x_m, y_m), n)
 
     def _target_view(self, t):
         x, y = t["sx"] / t["sw"], t["sy"] / t["sw"]
@@ -376,7 +647,11 @@ class MissionMap:
                 "cell": list(cell), "observations": t["n"], "shot": t["shot"],
                 "seen_from": list(t["seen_from"]), "best_dist_m": round(t["best_dist"], 2),
                 "views": [{"cell": list(c), "dist_m": round(d, 2)} for c, d in t.get("views", {}).items()],
-                "confirmed": bool(t.get("confirmed") or t["shot"])}
+                "best_view_deg": round(t.get("best_view_deg", 0.0), 1),
+                "first_seen": round(t.get("first_seen", 0.0), 2),      # shooting order: found first, shot first
+                "shape_votes": {k: round(v, 3) for k, v in t.get("votes", {}).items()},
+                "confirmed": bool(t.get("confirmed") or t["shot"]),
+                "missed": bool(t.get("missed"))}
 
     def mark_shot(self, tid):
         with self.lock:
@@ -400,15 +675,90 @@ class MissionMap:
                     out.append(t["id"])
         return out
 
+    def hit_twin(self, tid, radius_m=0.45):
+        """A card already HIT that is this same card (same colour, same shape or square/rect,
+        within radius): a duplicate entry. It is merged into the hit one and its id returned,
+        so the robot never spends time (and beads) shooting one card twice."""
+        with self.lock:
+            t = self.targets.get(tid)
+            if t is None or t["shot"] or not t["sw"]:
+                return None
+            x, y = t["sx"] / t["sw"], t["sy"] / t["sw"]
+            for o in list(self.targets.values()):
+                if o is t or not o["shot"] or not o["sw"] or o["color"] != t["color"]:
+                    continue
+                if o["shape"] != t["shape"] and not (o["shape"] in RECT_FAMILY and t["shape"] in RECT_FAMILY):
+                    continue
+                if math.hypot(o["sx"] / o["sw"] - x, o["sy"] / o["sw"] - y) <= radius_m:
+                    self._absorb(o, t)
+                    return o["id"]
+        return None
+
+    def card_of_color_near(self, color, x_m, y_m, radius_m=0.35):
+        """Id of a mapped card of this colour near (x, y), or None."""
+        with self.lock:
+            for t in self.targets.values():
+                if t["color"] == color and t["sw"] and \
+                        math.hypot(t["sx"] / t["sw"] - x_m, t["sy"] / t["sw"] - y_m) <= radius_m:
+                    return t["id"]
+        return None
+
+    def wall_point(self, cell, abs_deg):
+        """Where a ray from the block centre (0 = north, 90 = east) meets the block's edge:
+        a card seen from inside a block hangs on one of its walls."""
+        cx, cy = (cell[0] + 0.5) * self.tile, (cell[1] + 0.5) * self.tile
+        a = math.radians(abs_deg)
+        dx, dy = math.sin(a), math.cos(a)
+        half = self.tile / 2.0
+        t = min(half / abs(dx) if abs(dx) > 1e-6 else 1e9, half / abs(dy) if abs(dy) > 1e-6 else 1e9)
+        return cx + dx * t * 0.97, cy + dy * t * 0.97
+
+    def cards_in(self, cell):
+        """Ids of the mapped cards whose block is this cell."""
+        cell = tuple(cell)
+        with self.lock:
+            return [t["id"] for t in self.targets.values()
+                    if t["sw"] and tuple(self._target_view(t)["cell"]) == cell]
+
     def remove_target(self, tid):
         with self.lock:
             self.targets.pop(tid, None)
 
+    def note_edge_on(self, color, x_m, y_m, cell, view_deg):
+        """A card seen nearly edge-on (too slanted to map): kept so the robot goes back and
+        looks at that wall from the front before the round ends (last run: a green card was
+        seen 63 deg off twice and never looked at again)."""
+        with self.lock:
+            for e in self.edge_on:
+                if e["color"] == color and math.hypot(e["x_m"] - x_m, e["y_m"] - y_m) < 0.35:
+                    if view_deg < e["view"]:
+                        e.update(x_m=x_m, y_m=y_m, cell=tuple(cell), view=view_deg)
+                    return
+            self.edge_on.append({"color": color, "x_m": x_m, "y_m": y_m, "cell": tuple(cell),
+                                 "view": view_deg, "looked": False, "t": time.time()})
+
+    def edge_on_open(self, radius_m=0.45):
+        """Edge-on sightings not looked at again yet and not explained by a mapped card."""
+        with self.lock:
+            out = []
+            for e in self.edge_on:
+                if e["looked"]:
+                    continue
+                if any(t["sw"] and t["color"] == e["color"] and
+                       math.hypot(t["sx"] / t["sw"] - e["x_m"], t["sy"] / t["sw"] - e["y_m"]) <= radius_m
+                       for t in self.targets.values()):
+                    continue
+                out.append(dict(e))
+            return out
+
     def card_near(self, kind, x_m, y_m, radius_m=0.6, shot=None):
         """A mapped card of this kind near (x, y) (optionally only shot / not shot ones)."""
+        color, shape = split_kind(kind)
         with self.lock:
             for t in self.targets.values():
-                if t["kind"] != kind or not t["sw"] or (shot is not None and t["shot"] != shot):
+                if not t["sw"] or (shot is not None and t["shot"] != shot) or t["color"] != color:
+                    continue
+                if t["shape"] != shape and not (shape in RECT_FAMILY and t["shape"] in RECT_FAMILY):
                     continue
                 if math.hypot(t["sx"] / t["sw"] - x_m, t["sy"] / t["sw"] - y_m) <= radius_m:
                     return t["id"]
@@ -425,6 +775,7 @@ class MissionMap:
                 "grid_size": [self.nx, self.ny],
                 "tile_m": self.tile,
                 "start": list(self.start),
+                "start_heading": self.start_heading,
                 "end": list(self.robot),
                 "path": [list(p) for p in self.path],
                 "visited": sorted([list(v) for v in self.visited]),
@@ -443,6 +794,7 @@ class MissionMap:
         with self.lock:
             self.nx, self.ny = data["grid_size"]
             self.tile = data.get("tile_m", self.tile)
+            self.start_heading = int(data.get("start_heading", 0)) % 4
             self.walls = set(parse_edges(data.get("walls")))
             for e in data.get("walls", []):
                 if len(e) == 2 and isinstance(e[1], int):
@@ -500,6 +852,13 @@ class MissionMap:
             p1, p2 = px(self.start[0], self.start[1] + 1), px(self.start[0] + 1, self.start[1])
             cv2.rectangle(img, p1, p2, (200, 235, 200), -1)
             put(img, "S", (p1[0] + 4, p1[1] + 16), 0.5, (40, 120, 40), 2)
+            # arrow: the way the robot faces when it is put down
+            sc = px(self.start[0] + 0.5, self.start[1] + 0.5)
+            sh = math.radians(HEADING_DEG.get(self.start_heading, 0))
+            sl = cell * 0.36
+            cv2.arrowedLine(img, (int(sc[0] - math.sin(sh) * sl * 0.4), int(sc[1] + math.cos(sh) * sl * 0.4)),
+                            (int(sc[0] + math.sin(sh) * sl), int(sc[1] - math.cos(sh) * sl)),
+                            (40, 150, 40), 3, cv2.LINE_AA, tipLength=0.35)
 
             # grid
             for i in range(self.nx + 1):
@@ -647,6 +1006,9 @@ class MissionPanel:
         self.camera_latency_s = float(vis.get("camera_latency_s", 0.2))
         self.wall_margin_m = float(vis.get("behind_wall_margin_m", 0.15))
         self.min_observations = int(vis.get("min_observations", 2))
+        self.same_view_deg = float(vis.get("same_card_bearing_deg", 6.0))  # further apart = another card
+        self.slant_fix_deg = float(vis.get("slant_fix_min_deg", 25.0))   # correct shapes only beyond this slant
+        self.slant_fix_max_deg = float(vis.get("slant_fix_max_deg", 60.0))  # ... and not past this (a sliver)
         self._rejects = {}
         self.round_no = round_no
         self.round_t0 = None
@@ -659,9 +1021,15 @@ class MissionPanel:
         self.mission_done = threading.Event()
         self._last_tick = None
         self._log = []
+        self._log_all = []
+        self.last_guesses = []
+        self.last_single = []
         self.aim = AimState()
         self.buttons = []                      # [(rect, callback, enabled)] rebuilt every frame
         self.tab = "targets"
+        self.last_frames_dir = None            # frames recorded this round (chassis._start_recording)
+        self._trainer = None
+        self._thumbs = {}
         self._confirm_disconnect = 0.0
         self.editing = False                   # custom map editor open
         self.edit_text = ""
@@ -677,7 +1045,13 @@ class MissionPanel:
         start = grid.get("start", {"x": 0, "y": 0})
         m = MissionMap(grid.get("max_x", 5) + 1, grid.get("max_y", 5) + 1, self.tile,
                        (start.get("x", 0), start.get("y", 0)))
+        m.start_heading = parse_heading(start.get("heading", 0))
+        m.heading = m.start_heading
+        m.gimbal_abs = HEADING_DEG[m.start_heading]
         m.min_observations = int((self.config.get("vision", {}) or {}).get("min_observations", 2))
+        m.round_shape_min_observations = int(
+            (self.config.get("vision", {}) or {}).get("round_shape_min_observations", 3)
+        )
         return m
 
     def round_file(self, n):
@@ -699,6 +1073,7 @@ class MissionPanel:
                 self.map.load_round(self.prev_round)
                 self.map.start = tuple(self.prev_round.get("start", self.map.start))
                 self.map.robot = self.map.start
+                self.map.heading = self.map.start_heading
                 self.map.path = [self.map.start]
                 self.map.visited = {self.map.start}
                 print(f"[panel] round {n} uses map {prev}")
@@ -739,6 +1114,36 @@ class MissionPanel:
     def fmt(sec):
         sec = max(0, int(sec))
         return f"{sec // 60:02d}:{sec % 60:02d}"
+
+    # ---------------- start cell / direction (robot can be put down anywhere) ----------------
+    def can_edit_start(self):
+        ctl = self.controller
+        return self.round_no == 1 and (ctl is None or ctl.idle or ctl.state == "disconnected")
+
+    def click_start(self, cell):
+        """Map click before round 1: another cell = start there; the start cell = turn it."""
+        if not self.can_edit_start():
+            return
+        cell = tuple(cell)
+        m = self.map
+        if cell == tuple(m.start):
+            m.start_heading = (m.start_heading + 1) % 4
+        else:
+            m.start = cell
+        m.robot, m.heading, m.path, m.visited = cell, m.start_heading, [cell], {cell}
+        m.gimbal_rel, m.gimbal_abs = 0.0, HEADING_DEG[m.start_heading]
+        grid = self.config.setdefault("grid_map", {})
+        grid["start"] = {"x": cell[0], "y": cell[1], "heading": "NESW"[m.start_heading]}
+        self._start_dirty = True
+
+    def save_start(self):
+        m = self.map
+        try:
+            save_grid_to_settings(m.nx, m.ny, m.start, heading="NESW"[m.start_heading])
+            self._start_dirty = False
+            self.log(f"start {tuple(m.start)} facing {'NESW'[m.start_heading]} saved to settings.yaml")
+        except Exception as e:
+            self.log(f"start not saved: {e}")
 
     # ---------------- custom map editor ----------------
     def open_editor(self):
@@ -794,6 +1199,14 @@ class MissionPanel:
             elif chr(key) in "0123456789xX*" and len(self.edit_text) < 7:
                 self.edit_text += chr(key).lower()
             return True
+        if self._trainer is not None and self._trainer.review is not None:
+            ks = {ord("1"): "circle", ord("2"): "square", ord("3"): "rect_wide", ord("4"): "rect_tall",
+                  ord("5"): "none", ord("d"): "delete"}
+            if key in ks:
+                self._trainer.review_assign(ks[key])
+            elif key == 27:
+                self._trainer.review = None
+            return True
         if key in (ord("q"), 27):
             self.abort.set()
             return False
@@ -839,12 +1252,14 @@ class MissionPanel:
         self.round_t0 = time.time()
         self.round_end = None
         self.status = "running"
+        self._log_all = []
         self.log(f"Round {self.round_no} started ({self.fmt(self.time_limit())} limit)")
 
     def log(self, msg):
         stamp = datetime.now().strftime("%H:%M:%S")
         self._log.append(f"{stamp} {msg}")
         self._log = self._log[-6:]
+        self._log_all.append(f"{stamp} {msg}")     # whole round, saved as roundN_log.txt
         print(f"[panel] {msg}")
 
     def update_robot(self, cell, heading, gimbal_abs=None, visited=None):
@@ -860,17 +1275,59 @@ class MissionPanel:
         latency = self.camera_latency_s
         after = (settle_ts or time.time()) + latency   # frames arrive ~0.2 s late over Wi-Fi
         seen = {}                                      # kind -> [detections]
+        guesses = {}                                   # colour -> [detections that may be a card]
         for _ in range(frames):
             _, dets = self.worker.wait_fresh(after, timeout=0.6)
             after = time.time()
             for d in dets:
                 if d.is_card and d.distance_m is not None:  # every card goes on the map
                     seen.setdefault(d.kind, []).append(d)
+                elif d.guess and d.color in self.detector.card_colors:
+                    guesses.setdefault(d.color, []).append(d)
+                elif getattr(self.detector, "close_mode", False) and d.extra.get("clipped") and \
+                        d.color in self.detector.card_colors and d.bbox[3] >= 0.05 * (self.detector.last_frame_size or (0, 540))[1] and \
+                        d.extra.get("ring_fill", 1.0) <= self.detector.max_ring_fill and \
+                        "moves with the camera" not in str(d.extra.get("rejected", "")):
+                    # close look: part of a card at the picture edge (up close most of it is
+                    # outside the picture - it fails the normal maybe-card checks, but it is
+                    # right there): a suspect -> the camera is turned straight at it
+                    d.guess = d.shape if d.shape in SHAPES_ALL else "unknown"
+                    d.extra["guess_why"] = "cut by the picture edge (close)"
+                    guesses.setdefault(d.color, []).append(d)
+        # maybe-cards (cut by the picture edge, odd outline): seen in most frames -> a suspect
+        # the robot checks by re-aiming or from the next block (never shot as they are)
+        self.last_guesses = []
+        for color, ds in guesses.items():
+            if len(ds) >= frames // 2 + 1:
+                ds.sort(key=lambda d: d.area)
+                g = ds[len(ds) // 2]
+                self.last_guesses.append({"color": color, "shape": g.guess, "bearing": g.bearing_deg,
+                                          "elevation": g.elevation_deg, "abs_deg": (abs_deg + g.bearing_deg) % 360,
+                                          "why": g.extra.get("guess_why", ""), "cell": tuple(robot_cell)})
+        # one block can hold several cards (even two of the same kind): split each kind
+        # by bearing so every card in view is counted, not just one per kind
+        groups = []
+        for kind, ds in seen.items():
+            ds.sort(key=lambda d: d.bearing_deg)
+            cur = [ds[0]]
+            for d in ds[1:]:
+                if d.bearing_deg - cur[-1].bearing_deg > self.same_view_deg:
+                    groups.append((kind, cur))
+                    cur = []
+                cur.append(d)
+            groups.append((kind, cur))
         need = frames // 2 + 1
         found = []
         tof_m = tof_mm / 1000.0 if tof_mm and 60 < tof_mm < 8000 else None
-        for kind, ds in seen.items():
+        # a card seen in only ONE frame is not thrown away: it is kept as a "seen once" so the
+        # robot turns the camera right at it and looks again (active check) - sensitive to a
+        # glimpse, but only mapped when the second look confirms it
+        self.last_single = []
+        for kind, ds in groups:
             if len(ds) < need:
+                d1 = ds[0]
+                self.last_single.append({"kind": kind, "color": d1.color, "bearing": d1.bearing_deg,
+                                         "elevation": d1.elevation_deg, "abs_deg": (abs_deg + d1.bearing_deg) % 360})
                 continue
             ds.sort(key=lambda d: d.distance_m)
             d = ds[len(ds) // 2]                       # median by distance
@@ -892,15 +1349,79 @@ class MissionPanel:
             if not self.map.visible_from(robot_cell, x_m, y_m):
                 self._reject(d, "behind a mapped wall")
                 continue
-            v = self.map.add_observation(color, d.shape, robot_cell, abs_deg + d.bearing_deg, dist)
+            # slanted view: the width shrinks by cos(angle) and a wide rect looks square, a square
+            # looks tall. Undo it with the angle to the wall the card hangs on (from the map).
+            # The distance comes from the card height, which depends on the shape (6 / 7 / 9 cm),
+            # so every square / rect guess is tried: the one that stays itself once the width is
+            # corrected for its own viewing angle wins.
+            view = self.map.card_view_deg(robot_cell, x_m, y_m)
+            if d.shape in RECT_FAMILY and view is not None and view > self.slant_fix_max_deg:
+                # nearly edge-on: shape AND distance (from a height that depends on the shape)
+                # are guesses - a wrong card in the wrong place (the duplicates of the last run).
+                # Not mapped: that wall face counts as unseen, so the robot looks again from a
+                # better spot (see_max_view_deg <= this).
+                self._note(f"edgeon:{d.color}:{robot_cell}", f"a {d.color} card seen {view:.0f} deg off face-on "
+                           f"from {tuple(robot_cell)} - too slanted to map, will look from a better spot", 10.0)
+                self.map.note_edge_on(d.color, x_m, y_m, robot_cell, view)
+                continue
+            if d.shape in RECT_FAMILY:
+                # only a real slant is corrected, and with the detector's own cut-offs
+                # (square 0.78 .. 1.28): nearly face-on the camera's answer stands (the old
+                # code re-decided it with other cut-offs, so a card near a cut-off flipped)
+                aspect = d.extra.get("aspect_full") or (d.bbox[2] / float(d.bbox[3]) if d.bbox[3] else 1.0)
+                raw_h = self.detector.plate.get(d.shape, (0, 0.07))[1]
+                best = None
+                for sh in RECT_FAMILY:
+                    hm = self.detector.plate.get(sh, (0.07, 0.07))[1]
+                    dist_s = dist * hm / raw_h
+                    xs, ys = self.map.project(robot_cell, abs_deg + d.bearing_deg, dist_s)
+                    v_s = self.map.card_view_deg(robot_cell, xs, ys)
+                    # beyond ~60 deg the card is a sliver (width x0.5 or less): its shape cannot be
+                    # rebuilt from it - leave it to a face-on look or the ToF size
+                    if v_s is None or v_s < self.slant_fix_deg or v_s > self.slant_fix_max_deg:
+                        continue
+                    corr = aspect / max(math.cos(math.radians(v_s)), 0.35)
+                    as_shape = "rect_wide" if corr > 1.28 else ("rect_tall" if corr < 0.78 else "square")
+                    if as_shape == sh:           # this guess explains what the camera saw
+                        err = abs(math.log(corr / {"rect_wide": 1.5, "square": 1.0, "rect_tall": 2 / 3.0}[sh]))
+                        if best is None or err < best[0]:
+                            best = (err, sh, dist_s, xs, ys, v_s)
+                if best is not None and best[1] != d.shape:
+                    _, fixed, dist_f, xf, yf, view_f = best
+                    if self.map.inside(xf, yf, margin_m=0.05) and self.map.visible_from(robot_cell, xf, yf):
+                        self._note(f"slant:{d.color}:{d.shape}:{fixed}",
+                                   f"{d.color} {SHAPE_LABEL[d.shape]} seen {view_f:.0f} deg off face-on "
+                                   f"(width x{math.cos(math.radians(view_f)):.2f}) -> really {SHAPE_LABEL[fixed]}")
+                        d.shape = fixed
+                        dist = dist_f
+                        d.distance_m = dist
+                        d.is_target = d.is_card and d.kind in self.selected
+                        d.in_range = d.is_target and dist <= self.detector.max_shoot_m
+                        x_m, y_m, view = xf, yf, view_f
+            d.extra["view_deg"] = None if view is None else round(view, 1)
+            v = self.map.add_observation(d.color, d.shape, robot_cell, abs_deg + d.bearing_deg, dist,
+                                         view_deg=view)
+            if self.map._log_shape:
+                old, new = self.map._log_shape
+                self.map._log_shape = None
+                self.log(f"{old} is really {new} (seen face-on)")
+            while self.map.merged_log:
+                drop, keep = self.map.merged_log.pop(0)
+                self.log(f"{drop} is the same card as {keep} - merged")
             d.target_id = v["id"]
             tag = "" if d.is_target else " (not selected)"
             if v["observations"] == 1:
                 self.log(f"seen {v['id']} near cell {tuple(v['cell'])} ({dist:.2f} m){tag}")
-            elif v["confirmed"] and v["observations"] == self.map.min_observations:
+            elif v["confirmed"] and v["observations"] == self.map.required_observations(v["shape"]):
                 self.log(f"FOUND {v['id']} at cell {tuple(v['cell'])}{tag}")
             found.append(d)
         return found
+
+    def _note(self, key, msg, every_s=5.0):
+        now = time.time()
+        if now - self._rejects.get(key, 0) > every_s:   # do not flood the log
+            self._rejects[key] = now
+            self.log(msg)
 
     def _reject(self, d, why):
         key = (d.color, why)
@@ -931,9 +1452,28 @@ class MissionPanel:
         self.log("target selection saved to config/settings.yaml")
 
     def should_shoot(self, tid):
-        """A mapped card that is selected and not hit yet."""
+        """A mapped card that is selected and not hit yet - and whose shape is sure (seen
+        face-on once), unless every square / rect of that colour is selected anyway."""
         t = self.map.targets.get(tid)
-        return bool(t) and t["kind"] in self.selected and not t["shot"]
+        if not t or not t.get("confirmed") or t["kind"] not in self.selected or t["shot"]:
+            return False
+        if self.map.shape_sure(tid):
+            return True
+        if self.fire_ok(tid):
+            return True                      # whatever shape it really is, it is to be shot
+        # not sure of its shape: aim at it anyway - with the ToF on it, the real size decides
+        # (the shooter only fires when that measurement makes it a selected kind)
+        return True
+
+    def fire_ok(self, tid):
+        """May a bead be fired at this card: its shape is sure (face-on / ToF-measured), or
+        every square / rectangle of its colour is selected anyway."""
+        t = self.map.targets.get(tid)
+        if not t or not t.get("confirmed") or t["kind"] not in self.selected:
+            return False
+        if self.map.shape_sure(tid):
+            return True
+        return t["shape"] in RECT_FAMILY and all(kind_of(t["color"], sh) in self.selected for sh in RECT_FAMILY)
 
     def all_designated_shot(self):
         """Every selected kind that was found is hit (round 2 early stop)."""
@@ -946,6 +1486,14 @@ class MissionPanel:
         data = self.save_round_files()
         self.log(f"Round {self.round_no} saved -> "
                  f"{os.path.relpath(os.path.join(self.data_dir, f'round{self.round_no}_map.png'), BASE_DIR)}")
+        if self.last_frames_dir:
+            # the final map goes with this round's frames (the best labels); then label + train
+            try:
+                self.trainer.after_round(self.last_frames_dir, self.round_file(self.round_no),
+                                         auto=self._auto_after_round())
+            except Exception as e:
+                self.log(f"vision: after-round training not started: {e}")
+            self.last_frames_dir = None
         return data
 
     def save_round_files(self):
@@ -973,6 +1521,8 @@ class MissionPanel:
                 for t, *rest in self.aim.samples:
                     w.writerow([round(t - t0, 3)] + rest)
         cv2.imwrite(os.path.join(self.data_dir, f"round{self.round_no}_map.png"), img)
+        with open(os.path.join(self.data_dir, f"round{self.round_no}_log.txt"), "w", encoding="utf-8") as f:
+            f.write("\n".join(self._log_all) + "\n")
         return data
 
     def _map_report(self, map_img, data):
@@ -1095,15 +1645,127 @@ class MissionPanel:
         # right-bottom: tabs
         ty0 = my + ms + 8
         card(canvas, mx, ty0, mx + ms, WIN_H - 8)
-        for i, (key, label) in enumerate((("targets", "Targets"), ("select", "Select"), ("actions", "Actions"))):
-            self._btn(canvas, (mx + 8 + i * 96, ty0 + 6, mx + 98 + i * 96, ty0 + 30), label,
+        for i, (key, label) in enumerate((("targets", "Targets"), ("select", "Select"), ("actions", "Actions"),
+                                          ("vision", "Vision"))):
+            self._btn(canvas, (mx + 8 + i * 80, ty0 + 6, mx + 84 + i * 80, ty0 + 30), label,
                       cb=lambda k=key: setattr(self, "tab", k), on=self.tab == key)
         n_sel = len(self.selected)
-        put(canvas, f"shooting {n_sel} kind{'s' if n_sel != 1 else ''}", (mx + 306, ty0 + 23), 0.4,
+        put(canvas, f"{n_sel} kind{'s' if n_sel != 1 else ''}", (mx + 336, ty0 + 23), 0.4,
             ACCENT if n_sel else WARN)
         {"targets": self._draw_targets_tab, "select": self._draw_select_tab,
-         "actions": self._draw_actions_tab}[self.tab](canvas, mx, ty0 + 36, ms)
+         "actions": self._draw_actions_tab, "vision": self._draw_vision_tab}[self.tab](canvas, mx, ty0 + 36, ms)
+        if self._trainer is not None and self._trainer.review is not None:
+            self._draw_review(canvas, cam_x, cam_y, cam_w, cam_h)
         return canvas
+
+    # ---------------- Vision tab: auto label / auto train the box classifier ----------------
+    @property
+    def trainer(self):
+        if self._trainer is None:
+            from vision_trainer import VisionTrainer
+            self._trainer = VisionTrainer(self)
+        return self._trainer
+
+    def _auto_after_round(self):
+        return bool((self.config.get("vision", {}) or {}).get("auto_train_after_round", True))
+
+    def _toggle_auto_after_round(self):
+        v = not self._auto_after_round()
+        self.config.setdefault("vision", {})["auto_train_after_round"] = v
+        try:
+            save_setting("vision", "auto_train_after_round", "true" if v else "false")
+        except Exception as e:
+            self.log(f"could not save the setting: {e}")
+
+    def _draw_vision_tab(self, canvas, mx, y0, ms):
+        """Box classifier (stage 3): examples, model, auto label / train, review the unsure."""
+        from vision_trainer import counts
+        tr = self.trainer
+        ctl = self.controller
+        idle = (ctl is None or not ctl.running) and not tr.busy
+        x, w = mx + 10, ms - 20
+        n = counts()
+        short = {"circle": "circle", "square": "square", "rect_wide": "wide", "rect_tall": "tall",
+                 "none": "none", "unsure": "unsure"}
+        put(canvas, "examples: " + "  ".join(f"{short[c]} {n[c]}" for c in short), (x, y0 + 12), 0.35, TEXT)
+        info = tr.info or {}
+        if self.detector.roi_clf is not None:
+            m = f"model IN USE  {info.get('note', '')}"[:66]
+            col = OK
+        else:
+            m = ("no model - shapes by area only" + (f"  ({info.get('note')})" if info.get("note") else ""))[:70]
+            col = MUTED
+        put(canvas, m, (x, y0 + 30), 0.37, col)
+        st = (f"[{tr.busy}...] " if tr.busy else "") + (tr.status or "")
+        put(canvas, st[:70] if st else "record a round (frames saved), then Label + train", (x, y0 + 48), 0.36,
+            AMBER if tr.busy else MUTED)
+        bw = (w - 12) // 3
+        y = y0 + 58
+        for i, (label, cb, kind) in enumerate((("Auto label", tr.label_now, "normal"),
+                                               ("Train", tr.train_now, "normal"),
+                                               ("Label + train", tr.auto_now, "primary"))):
+            self._btn(canvas, (x + i * (bw + 6), y, x + i * (bw + 6) + bw, y + 28), label, cb=cb, kind=kind,
+                      enabled=idle, scale=0.42)
+        y += 34
+        for i, (label, cb, kind) in enumerate(((f"Review unsure ({n['unsure']})", tr.start_review, "normal"),
+                                               ("Colour samples", tr.colour_samples_now, "normal"),
+                                               ("Remove model", tr.delete_model, "danger"))):
+            self._btn(canvas, (x + i * (bw + 6), y, x + i * (bw + 6) + bw, y + 28), label, cb=cb, kind=kind,
+                      enabled=idle and (label != "Remove model" or self.detector.roi_clf is not None), scale=0.4)
+        y += 38
+        self._checkbox(canvas, x, y, self._auto_after_round(), "after each round: label + train automatically",
+                       cb=self._toggle_auto_after_round)
+        put(canvas, "labels: final map > clear shape > hard reject; else unsure",
+            (x, y + 38), 0.34, MUTED)
+
+    def _thumb(self, path):
+        t = self._thumbs.get(path)
+        if t is None:
+            img = cv2.imread(path)
+            t = cv2.resize(img, (64, 64)) if img is not None else np.full((64, 64, 3), 200, np.uint8)
+            self._thumbs[path] = t
+            if len(self._thumbs) > 800:
+                self._thumbs.clear()
+        return t
+
+    def _draw_review(self, canvas, x0, y0, w, h):
+        """Review grid over the camera view: click crops to select, then give them a label."""
+        r = self.trainer.review
+        cv2.rectangle(canvas, (x0, y0), (x0 + w, y0 + h), PANEL, -1)
+        cv2.rectangle(canvas, (x0, y0), (x0 + w, y0 + h), LINE, 1)
+        cols, rows, tile = 11, 5, 74
+        per = cols * rows
+        items = r["items"]
+        pages = max(1, (len(items) + per - 1) // per)
+        r["page"] = min(r["page"], pages - 1)
+        put(canvas, f"REVIEW '{r['label']}': {len(items)} crops  (page {r['page'] + 1}/{pages})  - click to select, "
+                    "then a label below (keys 1-5, D delete)", (x0 + 10, y0 + 18), 0.42, TEXT)
+        for j, p in enumerate(items[r["page"] * per:(r["page"] + 1) * per]):
+            tx, ty = x0 + 10 + (j % cols) * tile, y0 + 30 + (j // cols) * tile
+            canvas[ty:ty + 64, tx:tx + 64] = self._thumb(p)
+            if p in r["sel"]:
+                cv2.rectangle(canvas, (tx - 2, ty - 2), (tx + 65, ty + 65), WARN, 3)
+
+            def toggle(pp=p):
+                r["sel"] ^= {pp}
+            self.buttons.append(((tx, ty, tx + 64, ty + 64), toggle, True))
+        by = y0 + h - 40
+        labels = (("1 circle", "circle"), ("2 square", "square"), ("3 wide", "rect_wide"), ("4 tall", "rect_tall"),
+                  ("5 not card", "none"), ("D delete", "delete"))
+        bw = 86
+        for i, (lab, key) in enumerate(labels):
+            self._btn(canvas, (x0 + 10 + i * (bw + 4), by, x0 + 10 + i * (bw + 4) + bw, by + 30), lab,
+                      cb=lambda k=key: self.trainer.review_assign(k), kind="danger" if key == "delete" else "normal",
+                      enabled=bool(r["sel"]), scale=0.4)
+        bx = x0 + 10 + 6 * (bw + 4) + 10
+        self._btn(canvas, (bx, by, bx + 60, by + 30), "< page", scale=0.4,
+                  cb=lambda: r.__setitem__("page", max(0, r["page"] - 1)))
+        self._btn(canvas, (bx + 64, by, bx + 124, by + 30), "page >", scale=0.4,
+                  cb=lambda: r.__setitem__("page", r["page"] + 1))
+        self._btn(canvas, (bx + 128, by, bx + 188, by + 30), "all", scale=0.4,
+                  cb=lambda: r.__setitem__("sel", set(items[r["page"] * per:(r["page"] + 1) * per])))
+        self._btn(canvas, (x0 + w - 90, by, x0 + w - 10, by + 30), "Done", kind="primary", scale=0.45,
+                  cb=lambda: setattr(self.trainer, "review", None))
 
     def _draw_header(self, canvas):
         ctl = self.controller
@@ -1299,7 +1961,7 @@ class MissionPanel:
             self._btn(canvas, (bx, y, bx + bw, y + 24), label, cb=cb if ctl else None,
                       enabled=ctl is not None, scale=0.4)
         y += 30
-        put(canvas, f"trim pitch {float(sh.get('aim_pitch_offset_deg', -3.5)):+.1f}  "
+        put(canvas, f"trim pitch {float(sh.get('aim_pitch_offset_deg', 0.0)):+.1f}  "
                     f"yaw {float(sh.get('aim_yaw_offset_deg', 0.0)):+.1f} deg   (shots high -> Down)",
             (x, y + 10), 0.36, MUTED)
 
@@ -1408,7 +2070,7 @@ class MissionPanel:
         put(view, banner, (x, y), 1.1, col, 3)
 
     def _draw_sensors(self, canvas, x1, y1, x2, y2, tel):
-        """Top view of the robot: front ToF + left/right Sharp IR bars (RoboFinal wall follower)."""
+        """Top view: ToF, side Sharps, and the two front-corner IR switches."""
         card(canvas, x1, y1, x2, y2, "SENSORS")
         cx, cy = x1 + 82, y1 + 118
         bw, bh = 26, 34
@@ -1434,6 +2096,24 @@ class MissionPanel:
                 put(canvas, txt, ((x0 + xe - tw) // 2, cy + 26), 0.42, col)
         put(canvas, "L", (cx - bw // 2 - side_len - 2, cy - 10), 0.4, MUTED)
         put(canvas, "R", (cx + bw // 2 + side_len - 8, cy - 10), 0.4, MUTED)
+
+        # Front-corner digital modules. Red means the exact signal used by the
+        # emergency stop is active; showing IO/ADC makes wiring/polarity visible.
+        corner_y = cy - bh // 2 - 10
+        for dx, label, key in ((-22, "FL", "left"), (22, "FR", "right")):
+            near = tel.get(f"corner_{key}_near")
+            col = WARN if near is True else (OK if near is False else MUTED)
+            cv2.circle(canvas, (cx + dx, corner_y), 7, col, -1, cv2.LINE_AA)
+            put(canvas, label, (cx + dx - 9, corner_y - 11), 0.35, col)
+
+        for i, (label, key) in enumerate((("FL", "left"), ("FR", "right"))):
+            near = tel.get(f"corner_{key}_near")
+            state = "WALL" if near is True else ("clear" if near is False else "N/A")
+            io = tel.get(f"corner_{key}_io")
+            adc = tel.get(f"corner_{key}_raw")
+            col = WARN if near is True else (OK if near is False else MUTED)
+            put(canvas, f"{label} {state}  io={io} adc={adc}",
+                (x1 + 8, y2 - 27 + i * 16), 0.35, col)
 
         tof = tel.get("tof_mm")
         top = y1 + 42
@@ -1635,8 +2315,18 @@ def save_setting(section, key, value, path=None):
         f.write(text)
 
 
-def save_grid_to_settings(width, height, start=(0, 0), path=None):
-    """Write the map size / start cell into config/settings.yaml, keeping comments."""
+def parse_heading(h):
+    """'N'/'E'/'S'/'W' or 0..3 -> 0..3 (0 = up the map)."""
+    if isinstance(h, str):
+        return {"N": 0, "E": 1, "S": 2, "W": 3}.get(h.strip().upper()[:1], 0)
+    try:
+        return int(h) % 4
+    except (TypeError, ValueError):
+        return 0
+
+
+def save_grid_to_settings(width, height, start=(0, 0), path=None, heading=None):
+    """Write the map size / start cell (+ start direction) into config/settings.yaml, keeping comments."""
     path = path or os.path.join(BASE_DIR, "config", "settings.yaml")
     with open(path, "r", encoding="utf-8") as f:
         text = f.read()
@@ -1649,6 +2339,14 @@ def save_grid_to_settings(width, height, start=(0, 0), path=None):
     new = re.sub(r"^  max_y:.*$", f"  max_y: {height - 1}", new, count=1, flags=re.M)
     new = re.sub(r"(^  start:[^\n]*\n\s+x:\s*)\d+(\s*\n\s+y:\s*)\d+",
                  rf"\g<1>{start[0]}\g<2>{start[1]}", new, count=1, flags=re.M)
+    if heading is not None:
+        if re.search(r"^    heading:.*$", new, re.M):
+            new = re.sub(r"^    heading:.*$", f"    heading: {heading}         # way the robot faces at the start (N = up the map)",
+                         new, count=1, flags=re.M)
+        else:
+            new = re.sub(r"(^  start:[^\n]*\n\s+x:[^\n]*\n\s+y:[^\n]*\n)",
+                         rf"\g<1>    heading: {heading}         # way the robot faces at the start (N = up the map)\n",
+                         new, count=1, flags=re.M)
     with open(path, "w", encoding="utf-8") as f:
         f.write(text[:m.start()] + new + text[m.end():])
 

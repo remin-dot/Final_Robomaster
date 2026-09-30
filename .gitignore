@@ -1,3 +1,8 @@
 /.venv/
 data/demo/
 __pycache__/
+
+# recorded run frames and dataset backups (large, local only)
+data/raw/*/frames_*/
+data/roi_dataset_backup_*/
+.DS_Store
