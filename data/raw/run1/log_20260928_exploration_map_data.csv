@@ -1,0 +1,4 @@
+unix_timestamp,grid_x,grid_y,real_x_m,real_y_m,heading,heading_deg,front_tof_mm,right_ir_cm,back_ir_cm,left_ir_cm,action,odom_x_m,odom_y_m,yaw_deg
+1790614460.306483,0,0,0.0,0.0,0,0,2711,216.7,174.7,17.4,VISIT,-0.007,-0.003,-3.1
+1790614464.6123478,0,0,0.0,0.0,1,90,2167,174.7,17.4,271.1,VISIT,-0.003,-0.008,86.8
+1790614468.797593,0,0,0.0,0.0,0,0,2711,216.7,174.7,17.4,VISIT,-0.003,-0.006,-2.6

@@ -1,0 +1,27 @@
+t_s,target,phase,yaw_err_deg,pitch_err_deg,lock_count
+32.196,yellow rect_wide,COARSE,-39.558,-5.288,0
+32.921,yellow rect_wide,FINE,4.843,4.375,0
+33.332,yellow rect_wide,FINE,-0.724,-1.172,1
+33.554,yellow rect_wide,LOCKED,-0.71,-1.175,2
+34.893,yellow rect_wide,FIRE,-0.716,-1.198,0
+36.391,yellow rect_wide,FIRE,-0.007,0.435,0
+37.71,yellow rect_wide,FIRE,0.853,0.338,0
+39.02,yellow rect_wide,FIRE,0.888,0.171,0
+66.109,blue circle,COARSE,-4.718,-10.515,0
+66.543,blue circle,FINE,1.107,2.29,0
+66.94,blue circle,FINE,-0.143,-0.479,1
+67.175,blue circle,LOCKED,-0.145,-0.478,2
+76.999,blue circle,COARSE,-7.829,0.002,0
+77.418,blue circle,FINE,1.292,-0.547,1
+77.658,blue circle,LOCKED,1.285,-0.488,2
+78.985,blue circle,FIRE,0.416,-0.435,0
+80.326,blue circle,FIRE,0.547,-0.51,0
+81.658,blue circle,FIRE,0.488,-0.515,0
+83.011,blue circle,FIRE,0.491,-0.527,0
+108.407,yellow rect_wide,COARSE,2.896,-2.506,0
+108.859,yellow rect_wide,FINE,-0.495,0.656,1
+109.07,yellow rect_wide,LOCKED,-0.511,0.634,2
+110.405,yellow rect_wide,FIRE,-0.528,0.617,0
+111.733,yellow rect_wide,FIRE,-0.62,0.58,0
+113.067,yellow rect_wide,FIRE,-0.708,0.581,0
+114.404,yellow rect_wide,FIRE,-0.724,0.612,0

@@ -1,0 +1,283 @@
+robot:
+  connection_type: "ap"
+
+data_collection:
+  data_dir: "data/raw/run1"
+  files:
+    position: "position_data"
+    attitude: "attitude_data"
+    imu: "idle_imu_data"
+    esc: "esc_data"
+    distance: "tof_data"
+    infrared: "ir_data"
+    lidar: "gimbal_lidar_data"
+    exploration: "exploration_map_data"
+
+  frequencies:
+    position: 1
+    attitude: 5
+    imu: 10
+    esc: 20
+    distance: 5
+  buffer_time: 0.5   # Wait time before closing (seconds)
+
+movement:
+  xy_speed: 0.5     # Forward/Reverse Speed (m/s)
+  distance: 0.6      # Forward/backward travel distance (m)
+  z_speed: 90        # Rotation speed (degrees/second)
+  angle: 90          # Initial turning angle (e.g., 90 degrees)
+  wall_threshold_mm: 450   # ToF closer than this = wall on that side (centred: ~250 to a wall, ~850 past an open edge)
+  # Direction priority is relative to the last move. Continue straight, then curl
+  # right: on an open 6x6 this produces a 35-move
+  # coverage path (the theoretical minimum for 36 cells) with no repeated cell.
+  explore_order: [front, right, left, back]
+  release_after_round: true  # after a round: gimbal motors off + no drive commands (carry it to the start)
+  heading_guard_deg: 12     # heading off by more than this while driving: stop and turn back first
+  arrive_min_progress: 0.50 # a ToF wall stop after half a block = arrived (Dhai_8: front_wall_arrival_min_fraction)
+  arrive_tof_mm: 280        # a mid-cell object must trigger retreat + replan
+  # --- speed: slide instead of turning (mecanum wheels), then re-centre on the walls
+  strafe_moves: true        # false = turn the chassis to each way first (the old way)
+  cell_speed: 0.30          # m/s for a one-block move (Dhai_8 uses 0.28; 0.45 hit the front IR 6 times)
+  front_stop_mm: 200        # inflated hard stop; do not assume an arbitrary object is a maze wall
+  unknown_cell_speed: 0.25  # first entry into a cell: leave braking margin for arbitrary obstacles
+  reaction_time_s: 0.10     # sensor + control reaction allowance used by the braking-speed limit
+  tof_stale_s: 0.35         # stop if no recent valid navigation range arrives
+  clearance_scan_deg: 15    # before an unproven move, check left/centre/right of its corridor
+  precheck_block_m: 0.45    # an obstacle this far along that corridor blocks the move
+  robot_half_width_m: 0.16  # chassis half-width used for obstacle inflation
+  obstacle_margin_m: 0.04   # extra inflated clearance around arbitrary obstacles
+  gimbal_move_timeout_s: 2.5 # never let a jammed/limited gimbal freeze the mission thread
+  gimbal_scan_dps: 200      # gimbal speed for scans / looks (300 blurred the frames and the ToF lagged)
+  move_style: face          # face = turn at the block centre, drive forward with Sharp wall centering + heading PID, centre on arrival (Dhai_8's way) | strafe = never turn, slide
+  fixed_heading: true       # (strafe style) the chassis never turns: one heading all round, it slides every way
+  wall_pid:                 # face style, adapted from robomaster-assignment2-4x4_Dhai_8 (pid_controller.py)
+    enabled: true
+    nominal_side_mm: 140    # Sharp reading at a side wall with the robot centred (one wall only)
+    side_wall_mm: 260       # closer than this = a side wall
+    tolerance_mm: 20        # dead band: |L-R| (or |L - nominal|) under this = centred
+    lateral: {kp: 0.0010, ki: 0.0001, kd: 0.0010, max_speed: 0.08, integral_limit: 30}
+    yaw: {kp: 1.8, ki: 0.05, kd: 0.15, max_speed: 35, integral_limit: 20}
+    center: {kp: 0.0025, ki: 0.0, kd: 0.0002, max_speed: 0.08}   # centring in place on arrival (firmer than while driving)
+    max_lateral_deviation_m: 0.15   # drifted this far off the line while driving: stop + back
+    center_in_cell_s: 1.0   # after arriving: centre in place for up to this long (stops once centred)
+    fine_turn_tol_deg: 1.0  # after a turn: correct until within this, 3 readings in a row
+  slide_speed: 0.28         # m/s sideways (no front IR that way) - forward uses cell_speed
+  sweep_scan: true          # scan = one continuous gimbal sweep, ToF sampled on the way; still looks only where a card colour showed
+  sweep_dps: 150            # ... sweep speed (camera still sharp enough to spot a card colour)
+  sweep_window_deg: 10      # ... ToF samples within this of a direction give its wall distance (ToF ~10-20 Hz: one every 7-15 deg)
+  sweep_still_looks: 2      # ... at most this many still looks per block (at card colours seen in the sweep)
+  tof_latency_s: 0.05       # ToF reading age: matched to the gimbal angle it was measured at
+  end_reserve_s: 90         # time kept for the end of round 1 (second looks, shooting): behind this pace = fewer extra looks
+  gimbal_brake_dps2: 600    # gimbal is driven by speed commands (drive_speed): braking as it arrives, no swing past
+  gimbal_tol_deg: 1.0       # ... it is "there" within this
+  emergency_ttc_s: 0.35     # EMERGENCY STOP when it would touch something ahead / a side wall within this time
+  emergency_side_cm: 5      # ... or a side Sharp reads this close twice in a row (forward / back moves)
+  emergency_side_max_closing_cm_s: 40  # a side reading "closing" faster than this is a sensor jump at a wall end, not a wall
+  emergency_bump_g: 0.55    # ... or the IMU feels a bump this hard (normal starts/stops ~0.3 g)
+  wheel_check_s: 1.2        # drive commands this long with no wheel turning / no odometry / no yaw change = chassis not answering: wake it, else pause (0 = off)
+  turn_max_dps: 70          # chassis turn speed (150 hit a wall; 90 still set off the front IR while turning)
+  turn_brake_dps2: 200      # end of a turn: constant-deceleration stop (was a slow linear crawl over the last 40 deg)
+  turn_lag_s: 0.08          # chassis answers a turn command this late: brake earlier (4-7 deg past every turn at 11:34 run)
+  turn_tight_dps: 40        # ... when still near a wall after making room
+  turn_clear_side_cm: 12    # before turning: a side Sharp under this = slide away from that wall first
+  turn_clear_tof_mm: 200    # ... the front ToF under this (gimbal ahead) = back off first
+  slide_stop_mm: 220        # sliding sideways: stop at this ToF (the chassis side is closer than the ToF head)
+  approach_slow_per_s: 1.2  # near a wall ahead: speed <= this x (ToF - stop distance) - a gentle stop
+  brake_mps2: 0.6           # braking at the end of a move: smooth stop, no crawl
+  recenter: true            # after each scan: slide back to the middle of the block from the ToF readings
+  center_tof_mm: 170        # ToF reading to a wall of the block when the robot is centred - check on the robot
+  recenter_deadband_mm: 50  # (26 re-centres of 3-4 cm last run: ~20 s for nothing)  # closer to the middle than this: leave it
+  recenter_max_m: 0.10      # never slide more than this for a correction
+  scan_cost_s: 2.5          # four directions with ToF/camera waits overlapped
+  explore_mode: all         # complete coverage: physically visit every reachable cell
+  explore_tour: true        # visit-all: pick the next block from a planned route over all blocks still to see (fewer moves back)
+  scan_came_from: false     # the way it came in is known open (seen from the block before): not scanned again
+  fast_corridor: true       # walls both sides while driving in + way ahead known: sweep left/right only
+  corridor_wall_cm: 22      # a side Sharp reading this or less while in the block = a wall on that side
+  slide_hold_kp: 2.5        # sliding sideways: pull back front-back drift (odometry) - last run crept 20 cm into a wall
+  slide_hold_ki: 6.0        # ... and the steady part of it (the creep is steady)
+
+lidar_scan:
+  start_yaw: -75
+  end_yaw: 75
+  yaw_speed: 25
+  pitch: 0
+  min_valid_dist_mm: 100
+  max_valid_dist_mm: 10000
+
+grid_map:
+  max_x: 5          # 6x6 tiles -> indices 0..5
+  max_y: 5
+  start:             # 🟢 เพิ่มค่าเริ่มต้นตรงนี้ (เช่น วางหุ่นที่ช่องไหนก็ใส่ x, y นั้น)
+    x: 0
+    y: 0
+    heading: N         # way the robot faces at the start (N = up the map)
+  # goal:
+  #   x:
+  #   y:
+
+sharp_ir:                   # 2 Sharp GP2Y0A41 distance sensors on the SIDES (analog, 4-30 cm)
+  mount: side               # calibrate with src/sharp_calibrate.py (5, 10, 15, 20 cm)
+  left_ports: [[1, 2]]      # [adaptor id, port]
+  right_ports: [[2, 1]]
+  M: 12.0
+  C: 0.0
+  min_cm: 4.0
+  max_cm: 30.0
+  wall_detect_cm: 16.9
+  poll_hz: 20             # react to a corner switch in about 50 ms instead of 100 ms
+  side_safe_cm: 9.0
+  side_danger_cm: 6.0
+  calibration:              # saved 2026-09-30 00:07
+    left: {A: 4781.791017, B: -1.0469, mode: analog, points: [[5.0, 690.0], [10.0, 370.0], [15.0, 254.0], [20.0, 181.0]]}
+    right: {A: 2153519.156214, B: -1.9317, mode: analog, points: [[5.0, 728.0], [10.0, 663.0], [15.0, 477.0], [20.0, 389.0]]}
+
+ir_corner:                  # 2 IR obstacle modules on the FRONT CORNERS, ~45 deg out (on/off, no calibration)
+  enabled: true             # set their screws so the LED lights before a chassis corner can touch
+  trigger_cm: 7             # physical screw setting for both FL/FR; used in panel/logs
+  single_hold_stop_s: 0.35  # one corner = steer away first; stop only if it stays active
+  caution_speed_fraction: 0.25 # forward speed while one corner is warning
+  left_port: [1, 1]         # [adaptor id, port]
+  right_port: [2, 2]
+  signal: io                # fallback signal source
+  left_signal: io           # FL digital IO switches correctly
+  right_signal: io          # FR digital IO (cable repaired)
+  active_low: true          # fallback polarity for modules without a side-specific setting
+  left_active_low: true     # FL: clear io=1, wall io=0
+  right_active_low: true    # FR: clear io=1, wall io=0
+  threshold_raw: 512        # fallback ADC threshold
+  right_threshold_raw: 530  # diagnostic fallback only; IO mode ignores it
+  confirm_tof_mm: 400       # stationary/map checks require ToF or Sharp confirmation ...
+  confirm_side_cm: 12       # one moving trigger = caution; both/persistent trigger = stop
+
+vision:
+  resolution: "540p"        # camera stream; 7 cm cards at 1.2 m are too small at 360p
+  panel_fps: 30
+  hfov_deg: 96              # camera field of view - Actions > "Calibrate: card at 1 m" sets it
+  camera_latency_s: 0.06    # measured on this robot; wrong delay makes closed-loop aim oscillate
+  color_model: veto         # hsv = ranges only | veto = ranges minus pixels the samples call background (safe) | both = must also match the card samples | lab = samples only
+  record_frames: true       # save a camera frame every record_every_s during a round (data_dir/frames_<time>/) for colour tuning
+  record_every_s: 1.0
+  # 2026-09-30: back to the old detector - on 1150 recorded frames it gave 152 right / 6 wrong kinds
+  # vs the new stages' 150 right / 28 wrong (the box classifier called far tall rects squares)
+  refine_roi: false         # stage 2: re-find each blob's edge in a box around it (colour distance + Otsu)
+  refine_grabcut: auto      # ... GrabCut when Otsu disagrees with the first mask (auto) | on | off
+  shape_method: contour       # area = shape from box fill / ellipse-vs-rectangle overlap / aspect | contour = the old corner rules
+  roi_classifier: false     # stage 3: use config/shape_knn.npz when it exists (roi_dataset -> roi_label -> roi_train)
+  auto_train_after_round: false # end of a round: label this round's frames (by the final map) and retrain the box classifier (Vision tab)
+  exposure_s: 0.02          # camera exposure: smear length of frames taken while the gimbal turns
+  motion_min_dps: 25        # gimbal turning faster than this: the frame is checked with the blur-tolerant detector
+  motion_checks_per_block: 2  # cards seen only in blurred frames: this many still looks per block to confirm (0 = off)
+  motion_min_frames: 3      # a colour-only (blurred, no outline) sighting must show in this many frames
+  motion_max_elev_deg: 4    # ... and not above this (the room over the walls - it made the camera look UP)
+  bottom_ignore_ratio: 0.15 # blaster barrel is visible at the bottom of the frame
+  max_shoot_tiles: 2        # rule: shoot from <= 2 tiles
+  # the assignment sheet's own set (colour -> shape): the "Sheet set" preset
+  catalogue:
+    blue: circle
+    red: rect_wide
+    yellow: rect_tall
+    green: square
+  # real card size [width, height] (m) -> distance. Measured by RoboFinal on the lab cards:
+  # circle 7 cm across, square 7 x 7 cm, rectangle 9 x 6 cm
+  plate_size_m:             # per shape, any colour
+    circle: [0.07, 0.07]
+    square: [0.07, 0.07]
+    rect_wide: [0.09, 0.06]
+    rect_tall: [0.06, 0.09]
+  # which colours can be cards at all (the room walls are yellow: RoboFinal's round 1
+  # found 12 "yellow objects" - the checks below drop them; remove yellow here if not)
+  card_colors: [blue, red, yellow, green]
+  min_area_px: 80           # smallest blob at 640 px width (7 cm card at 1.2 m ~ 250 px)
+  min_solidity: 0.85        # ragged blobs are not cards
+  max_ring_fill: 0.25       # same colour all around the blob = wall / tape, not a card
+  behind_wall_margin_m: 0.15  # further than the ToF wall that way (+ this) = behind the wall
+  min_observations: 2       # scan stops that must see a target before it counts
+  round_shape_min_observations: 3  # circles/squares need extra evidence; far circles can look boxy
+  # --- ignore the room around the arena (people, tables, chairs, yellow walls) ---
+  ignore_above_wall: true   # nothing above the top of the white foam walls (+ floor) is a card
+  wall_s_max: 60            # foam wall / floor pixels: saturation at most this ...
+  wall_v_min: 120           # ... and brightness at least this
+  wall_margin_frac: 0.03    # keep this much of the picture height above the wall line
+  wall_max_gap_frac: 0.25   # a non-white gap up to this (a card in front of a wall) stays inside the band
+  max_elevation_deg: 1.5    # cards hang lower than the camera (~0.25 m): nothing more than this above
+                            # the horizon is a card (uses the live gimbal pitch). null = off
+  # --- close look: something seen in / next to the robot's block -> camera down, turn all round
+  verify_sweep: true
+  verify_pitch_deg: -10     # how far the camera looks down for the close look (spins all round)
+  # --- a wall face counts as "seen" (no visit needed for it) from a look this close / face-on
+  see_range_m: 1.0
+  see_max_view_deg: 60      # = vision.slant_fix_max_deg: a card seen more slanted is not mapped, so its wall is not "seen"
+  # --- colour: card must hang on the white wall; the walls are the white-balance reference
+  white_balance: true       # scale B, G, R so the white walls come out neutral
+  neutral_sat: 70           # saturation below this = wall / floor grey
+  min_neutral_around_card: 0.45   # share of neutral pixels around a card (tape on mats, clothes, robot parts: less)
+  min_neutral_around_guess: 0.65  # ... around a maybe-card (stricter)
+  guess_min_solidity: 0.75
+  guess_min_height_frac: 0.08     # a maybe-card must be at least this tall in the picture
+  slant_fix_min_deg: 25     # a shape is corrected for the viewing angle only beyond this slant
+  # --- camera wall check (a wrong turn must not drive into a wall)
+  wall_rise_m: 0.12         # foam wall height - camera height; re-learnt from the ToF at every front scan
+  camera_block_m: 0.40      # before a move: a wall this close in the path (and the ToF agrees) = do not move
+  camera_stop_m: 0.22       # while moving: stop when a wall in the path gets this close
+  camera_tof_block_mm: 450  # ... only if the ToF also reads closer than this (before a move)
+  camera_tof_stop_mm: 300   # ... or this (while moving; a normal cell ahead reads ~850 mm)
+                            # (the camera only stops / blocks a move when the ToF agrees)
+  # --- a card hangs at card height: floor tape and things in the room are not at it
+  camera_height_m: 0.25     # camera lens above the floor (RoboFinal measured 0.25)
+  card_min_height_m: 0.06   # lower than this = on the floor (tape); cards on 15-20 cm sticks sit ~0.12-0.17 m up
+  card_max_height_m: 0.45   # up to just under the foam wall top (~0.4-0.5 m): the whole wall area counts, the room above does not
+  # card kinds to shoot on the day ("colour shape"; shooting a wrong one = -1).
+  # colours: blue red yellow green   shapes: circle rect_wide rect_tall square
+  # e.g. ["blue circle", "red circle"]. Switch them on the panel: Select tab -> Save.
+  shoot_targets: ["blue circle", "blue rect_tall", "blue rect_wide", "blue square", "green circle", "green rect_tall", "green rect_wide", "green square", "red circle", "red rect_tall", "red rect_wide", "red square", "yellow circle", "yellow rect_tall", "yellow rect_wide", "yellow square"]
+  round_time_limit_s: {1: 600, 2: 300}
+
+shooting:
+  enabled: true
+  fire_type: "water"        # "water" (gel beads) or "ir"
+  shots_per_target: 1       # beads per trigger pull; then it checks whether the card fell
+  confirm_fall: true        # after each shot look again: still standing -> re-aim + fire again
+  max_shots_per_target: 3   # ... at most this many times, then move on
+  min_shoot_m: 0.30         # closer than this: slide away a little first (0.21 m missed 5 times)
+  back_off_max_m: 0.08      # how far it may slide away inside a block
+  reserve_margin_s: 45      # keep time for obstacle replans and shot retries before 10 minutes
+  fall_wait_s: 0.6          # time for a hit card to fall before looking
+  aim_tolerance_deg: 1.5
+  aim_pitch_offset_deg: 2.0   # + aims higher (0.0 hit only with the aim ~+2 deg: run 2026-09-30 10:52); fine-tune with the panel's Aim trim
+  barrel_below_camera_m: 0.03 # the barrel sits below the camera: aim up atan(this / distance) - most up close
+  aim_tolerance_max_deg: 3.5  # lock window grows with the card's size in the picture, up to this
+  aim_yaw_offset_deg: 0.0
+  lock_frames: 2            # frames in a row on target before firing (RoboFinal)
+  lost_retries: 3           # frames to wait for a card that drops out while aiming before giving up
+  reach_cells: 1            # how far the card's block may be from the robot's block (1 = next to it)
+  reach_pattern: 3x3        # 3x3 = the card in the robot's block or ANY of the 8 around it (diagonals too) | cross = only straight left/right/ahead/behind (old rule)
+  straight_band_m: 0.2      # (cross pattern only) the card must be within this of the robot's row / column line
+  order: fastest            # global least-time route; one stop may shoot several targets
+  max_shot_view_deg: 55     # ... and seen at most this slanted; otherwise go into its block, camera down, and shoot
+  mop_up_round1: true       # end of round 1: drive next to found-but-not-hit cards and shoot them
+  queue_detour_moves: 0     # shoot when already in reach; otherwise batch targets in the fastest route
+  retry_missed: true        # end of round 1, time left: one more go at cards still standing after max shots
+  second_look_edge_on: true # end of exploring: look from the front at cards seen only nearly edge-on (not mapped)
+  aim_center_frac: 0.2      # lock window = this share of the card's size in the picture (aim at its middle) ...
+  aim_tolerance_min_deg: 0.6  # ... never tighter than this, never wider than aim_tolerance_deg
+  aim_lost_s: 0.6           # card gone this long while aiming -> give up (was a 2.5 s wait)
+  aim_kp_per_s: 3.5         # coarse tracking: lower gain prevents delayed-frame overshoot
+  aim_max_dps: 100          # cap coarse speed so the gimbal cannot shake the chassis
+  aim_fine_kp_per_s: 2.0    # inside aim_fine_zone_deg, settle gently for the lock frames
+  aim_fine_max_dps: 35
+  aim_fine_zone_deg: 3.0
+  aim_deadband_deg: 0.20    # do not chase sub-pixel detector jitter
+  aim_accel_dps2: 300       # slew limit: no instant reversal of gimbal speed
+  aim_target_jump_deg: 5.0  # reject a delayed/wrong blob that moves the estimated target abruptly
+  aim_timeout_s: 2.5        # ... give up locking after this
+  aim_mode: snap            # snap = aimbot: full speed then a braking curve straight onto the card (no swing) | damped = the gentle controller above
+  aim_snap_max_dps: 240     # snap: top gimbal speed
+  aim_brake_dps2: 900       # snap: braking (deg/s^2) - lower it if the gimbal still swings past
+  aim_response_s: 0.05      # snap: gimbal lag to a speed command (stop pushing this early)
+  aim_near_kp_per_s: 6      # snap: (10 hunted +-0.5 deg for ~1 s before the lock, run 11:33) last degrees - deg/s per deg of error (no chatter at the end)
+  aim_flick: true           # snap: fire as soon as the gimbal is on the spot still frames gave (no extra lock frames)
+  good_shot_m: 0.95         # best angle: farther than this ...
+  good_shot_view_deg: 30    # ... or more slanted = wait for a better block still to be explored (if one exists)
+  learn_camera_latency: false # fixed from the real log; do not retune from an oscillating aim trace
+  miss_bracket_frac: 0.2    # a miss with the aim on the middle: next shot this share of the card height higher, then lower

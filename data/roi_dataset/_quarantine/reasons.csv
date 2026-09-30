@@ -1,0 +1,424 @@
+circle,cap_20260930_085321_586_yellow_m.png,wider than tall - a slant only makes a circle narrower (aspect 3.14)
+circle,cap_20260930_085402_057_red_m.png,has corners like a rectangle
+circle,cap_20260930_085828_598_yellow_m.png,not an ellipse - part of a circle? (fit 0.63)
+circle,cap_20260930_085829_357_green_m.png,not an ellipse - part of a circle? (fit 0.81)
+circle,cap_20260930_085853_340_green_m.png,not an ellipse - part of a circle? (fit 0.82)
+circle,cap_20260930_085904_957_green_m.png,its neighbours are another shape (100 %)
+circle,cap_20260930_085905_651_yellow_m.png,not an ellipse - part of a circle? (fit 0.82)
+circle,cap_20260930_085906_306_yellow_m.png,not an ellipse - part of a circle? (fit 0.82)
+square,cap_20260930_085942_339_red_m.png,its neighbours are another shape (86 %)
+square,cap_20260930_085949_107_red_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_085949_389_red_m.png,square seen so slanted it looks tall (aspect 0.36)
+square,cap_20260930_085950_118_red_m.png,square seen so slanted it looks tall (aspect 0.50)
+square,cap_20260930_085951_767_red_m.png,square seen so slanted it looks tall (aspect 0.50)
+square,cap_20260930_085952_216_red_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_085952_491_red_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_085958_382_red_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_085958_767_red_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_085959_193_red_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_085959_961_red_m.png,square seen so slanted it looks tall (aspect 0.52)
+square,cap_20260930_090001_438_red_m.png,square seen so slanted it looks tall (aspect 0.50)
+square,cap_20260930_090037_783_yellow_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090038_095_yellow_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090038_722_yellow_m.png,square seen so slanted it looks tall (aspect 0.36)
+square,cap_20260930_090041_592_yellow_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090042_244_yellow_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090042_725_yellow_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090043_588_yellow_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090044_521_yellow_m.png,square seen so slanted it looks tall (aspect 0.41)
+square,cap_20260930_090045_137_yellow_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090045_387_yellow_m.png,square seen so slanted it looks tall (aspect 0.50)
+square,cap_20260930_090048_416_yellow_m.png,its neighbours are another shape (100 %)
+square,cap_20260930_090048_663_yellow_m.png,its neighbours are another shape (86 %)
+square,cap_20260930_090049_314_yellow_m.png,square seen so slanted it looks tall (aspect 0.59)
+square,cap_20260930_090049_594_yellow_m.png,square seen so slanted it looks tall (aspect 0.36)
+square,cap_20260930_090049_811_yellow_m.png,square seen so slanted it looks tall (aspect 0.36)
+square,cap_20260930_090051_694_yellow_m.png,square seen so slanted it looks tall (aspect 0.36)
+square,cap_20260930_090052_993_yellow_m.png,square seen so slanted it looks tall (aspect 0.32)
+square,cap_20260930_090053_708_yellow_m.png,square seen so slanted it looks tall (aspect 0.59)
+square,cap_20260930_090055_453_yellow_m.png,square seen so slanted it looks tall (aspect 0.32)
+square,cap_20260930_090119_652_green_m.png,square seen so slanted it looks tall (aspect 0.59)
+square,cap_20260930_090119_900_green_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090120_212_green_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090120_494_green_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090120_774_green_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090121_224_green_m.png,square seen so slanted it looks tall (aspect 0.50)
+square,cap_20260930_090122_885_green_m.png,square seen so slanted it looks tall (aspect 0.50)
+square,cap_20260930_090123_168_green_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090123_381_green_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090123_563_green_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090128_193_green_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090128_410_green_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090128_731_green_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090129_060_green_m.png,square seen so slanted it looks tall (aspect 0.59)
+square,cap_20260930_090130_333_green_m.png,square seen so slanted it looks tall (aspect 0.41)
+square,cap_20260930_090130_588_green_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090130_777_green_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090241_154_blue_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090241_401_blue_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090241_611_blue_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090241_785_blue_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090242_027_blue_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090242_238_blue_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090242_414_blue_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090242_657_blue_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090242_838_blue_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090243_385_blue_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090243_562_blue_m.png,its neighbours are another shape (100 %)
+square,cap_20260930_090243_779_blue_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090244_019_blue_m.png,square seen so slanted it looks tall (aspect 0.50)
+square,cap_20260930_090244_161_blue_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090244_371_blue_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090244_549_blue_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090244_725_blue_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090245_851_blue_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090246_025_blue_m.png,square seen so slanted it looks tall (aspect 0.50)
+square,cap_20260930_090246_204_blue_m.png,square seen so slanted it looks tall (aspect 0.36)
+square,cap_20260930_090246_385_blue_m.png,square seen so slanted it looks tall (aspect 0.41)
+square,cap_20260930_090246_560_blue_m.png,square seen so slanted it looks tall (aspect 0.36)
+square,cap_20260930_090246_769_blue_m.png,square seen so slanted it looks tall (aspect 0.36)
+square,cap_20260930_090246_950_blue_m.png,square seen so slanted it looks tall (aspect 0.36)
+square,cap_20260930_090247_126_blue_m.png,its neighbours are another shape (100 %)
+square,cap_20260930_090247_307_blue_m.png,square seen so slanted it looks tall (aspect 0.36)
+square,cap_20260930_090247_485_blue_m.png,square seen so slanted it looks tall (aspect 0.36)
+square,cap_20260930_090247_658_blue_m.png,square seen so slanted it looks tall (aspect 0.36)
+square,cap_20260930_090247_871_blue_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090248_052_blue_m.png,square seen so slanted it looks tall (aspect 0.36)
+square,cap_20260930_090248_265_blue_m.png,square seen so slanted it looks tall (aspect 0.36)
+square,cap_20260930_090248_608_blue_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090248_784_blue_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090250_153_blue_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090250_992_yellow_m.png,its neighbours are another shape (86 %)
+square,cap_20260930_090252_018_blue_m.png,its neighbours are another shape (100 %)
+square,cap_20260930_090253_495_blue_m.png,square seen so slanted it looks tall (aspect 0.59)
+square,cap_20260930_090253_671_blue_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090253_854_blue_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090254_034_blue_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090254_206_blue_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090254_387_blue_m.png,square seen so slanted it looks tall (aspect 0.50)
+square,cap_20260930_090254_567_blue_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090254_744_blue_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090254_920_blue_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090255_096_blue_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090255_542_blue_m.png,square seen so slanted it looks tall (aspect 0.55)
+square,cap_20260930_090255_854_blue_m.png,square seen so slanted it looks tall (aspect 0.50)
+square,cap_20260930_090256_199_blue_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090256_409_blue_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090256_620_blue_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090256_866_blue_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090257_073_blue_m.png,square seen so slanted it looks tall (aspect 0.50)
+square,cap_20260930_090257_356_blue_m.png,square seen so slanted it looks tall (aspect 0.50)
+square,cap_20260930_090257_565_blue_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090257_774_blue_m.png,square seen so slanted it looks tall (aspect 0.50)
+square,cap_20260930_090257_955_blue_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090258_301_blue_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090258_510_blue_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,cap_20260930_090258_719_blue_m.png,square seen so slanted it looks tall (aspect 0.45)
+square,f_1790730045.08_0_red_m.png,its neighbours are another shape (100 %)
+square,f_1790730046.11_0_red_m.png,its neighbours are another shape (100 %)
+square,f_1790730047.15_0_red_m.png,its neighbours are another shape (86 %)
+square,frames_075930_f_1790730047.15_0_red_unclear_m.png,its neighbours are another shape (86 %)
+rect_wide,cap_20260930_090457_685_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.91)
+rect_wide,cap_20260930_090458_621_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.91)
+rect_wide,cap_20260930_090458_761_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.91)
+rect_wide,cap_20260930_090458_942_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.91)
+rect_wide,cap_20260930_090459_118_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.86)
+rect_wide,cap_20260930_090459_327_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.82)
+rect_wide,cap_20260930_090459_506_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.77)
+rect_wide,cap_20260930_090459_685_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.77)
+rect_wide,cap_20260930_090459_892_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.73)
+rect_wide,cap_20260930_090500_073_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.73)
+rect_wide,cap_20260930_090500_289_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.68)
+rect_wide,cap_20260930_090500_434_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.64)
+rect_wide,cap_20260930_090500_609_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.64)
+rect_wide,cap_20260930_090500_819_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.59)
+rect_wide,cap_20260930_090500_990_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.59)
+rect_wide,cap_20260930_090501_164_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.55)
+rect_wide,cap_20260930_090501_375_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.55)
+rect_wide,cap_20260930_090501_756_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.55)
+rect_wide,cap_20260930_090501_965_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.45)
+rect_wide,cap_20260930_090502_142_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.45)
+rect_wide,cap_20260930_090502_454_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.45)
+rect_wide,cap_20260930_090503_374_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.45)
+rect_wide,cap_20260930_090503_552_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.36)
+rect_wide,cap_20260930_090503_799_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.36)
+rect_wide,cap_20260930_090504_653_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.41)
+rect_wide,cap_20260930_090505_138_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.45)
+rect_wide,cap_20260930_090505_481_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.55)
+rect_wide,cap_20260930_090505_689_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.55)
+rect_wide,cap_20260930_090505_898_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.59)
+rect_wide,cap_20260930_090506_105_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.64)
+rect_wide,cap_20260930_090506_320_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.73)
+rect_wide,cap_20260930_090506_496_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.82)
+rect_wide,cap_20260930_090514_004_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.95)
+rect_wide,cap_20260930_090514_216_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.91)
+rect_wide,cap_20260930_090514_393_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.91)
+rect_wide,cap_20260930_090514_604_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.82)
+rect_wide,cap_20260930_090514_850_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.82)
+rect_wide,cap_20260930_090515_057_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.82)
+rect_wide,cap_20260930_090515_336_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.73)
+rect_wide,cap_20260930_090515_549_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.73)
+rect_wide,cap_20260930_090515_758_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.73)
+rect_wide,cap_20260930_090516_073_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.73)
+rect_wide,cap_20260930_090516_315_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.64)
+rect_wide,cap_20260930_090516_523_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.64)
+rect_wide,cap_20260930_090516_736_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.64)
+rect_wide,cap_20260930_090517_022_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.64)
+rect_wide,cap_20260930_090517_230_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.64)
+rect_wide,cap_20260930_090517_442_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.55)
+rect_wide,cap_20260930_090517_620_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.55)
+rect_wide,cap_20260930_090517_935_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.50)
+rect_wide,cap_20260930_090518_153_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.45)
+rect_wide,cap_20260930_090518_428_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.45)
+rect_wide,cap_20260930_090519_045_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.50)
+rect_wide,cap_20260930_090519_973_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.55)
+rect_wide,cap_20260930_090615_414_red_m.png,wide seen so slanted it looks square / tall (aspect 0.95)
+rect_wide,cap_20260930_090615_591_red_m.png,wide seen so slanted it looks square / tall (aspect 0.95)
+rect_wide,cap_20260930_090616_004_red_m.png,wide seen so slanted it looks square / tall (aspect 0.82)
+rect_wide,cap_20260930_090616_178_red_m.png,wide seen so slanted it looks square / tall (aspect 0.77)
+rect_wide,cap_20260930_090616_392_red_m.png,wide seen so slanted it looks square / tall (aspect 0.73)
+rect_wide,cap_20260930_090616_635_red_m.png,wide seen so slanted it looks square / tall (aspect 0.64)
+rect_wide,cap_20260930_090616_809_red_m.png,wide seen so slanted it looks square / tall (aspect 0.64)
+rect_wide,cap_20260930_090617_628_red_m.png,wide seen so slanted it looks square / tall (aspect 0.73)
+rect_wide,cap_20260930_090617_835_red_m.png,wide seen so slanted it looks square / tall (aspect 0.82)
+rect_wide,cap_20260930_090618_078_red_m.png,wide seen so slanted it looks square / tall (aspect 0.86)
+rect_wide,cap_20260930_090618_256_red_m.png,wide seen so slanted it looks square / tall (aspect 0.95)
+rect_wide,cap_20260930_090623_836_red_m.png,its neighbours are another shape (100 %)
+rect_wide,cap_20260930_090624_220_red_m.png,wide seen so slanted it looks square / tall (aspect 0.91)
+rect_wide,cap_20260930_090624_396_red_m.png,wide seen so slanted it looks square / tall (aspect 0.86)
+rect_wide,cap_20260930_090624_608_red_m.png,wide seen so slanted it looks square / tall (aspect 0.82)
+rect_wide,cap_20260930_090624_819_red_m.png,wide seen so slanted it looks square / tall (aspect 0.82)
+rect_wide,cap_20260930_090625_027_red_m.png,wide seen so slanted it looks square / tall (aspect 0.77)
+rect_wide,cap_20260930_090625_241_red_m.png,wide seen so slanted it looks square / tall (aspect 0.73)
+rect_wide,cap_20260930_090625_485_red_m.png,wide seen so slanted it looks square / tall (aspect 0.64)
+rect_wide,cap_20260930_090625_660_red_m.png,wide seen so slanted it looks square / tall (aspect 0.55)
+rect_wide,cap_20260930_090625_942_red_m.png,wide seen so slanted it looks square / tall (aspect 0.55)
+rect_wide,cap_20260930_090626_190_red_m.png,wide seen so slanted it looks square / tall (aspect 0.50)
+rect_wide,cap_20260930_090626_374_red_m.png,wide seen so slanted it looks square / tall (aspect 0.45)
+rect_wide,cap_20260930_090626_586_red_m.png,wide seen so slanted it looks square / tall (aspect 0.41)
+rect_wide,cap_20260930_090626_828_red_m.png,wide seen so slanted it looks square / tall (aspect 0.41)
+rect_wide,cap_20260930_090627_414_red_m.png,wide seen so slanted it looks square / tall (aspect 0.36)
+rect_wide,cap_20260930_090734_189_yellow_m.png,several pieces
+rect_wide,cap_20260930_090735_529_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.95)
+rect_wide,cap_20260930_090737_376_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.64)
+rect_wide,cap_20260930_090741_273_yellow_m.png,wide seen so slanted it looks square / tall (aspect 0.45)
+rect_wide,cap_20260930_090829_825_green_m.png,wide seen so slanted it looks square / tall (aspect 0.91)
+rect_wide,cap_20260930_090830_044_green_m.png,wide seen so slanted it looks square / tall (aspect 0.91)
+rect_wide,cap_20260930_090833_207_green_m.png,wide seen so slanted it looks square / tall (aspect 0.95)
+rect_wide,cap_20260930_090833_521_green_m.png,wide seen so slanted it looks square / tall (aspect 0.86)
+rect_wide,cap_20260930_090833_700_green_m.png,wide seen so slanted it looks square / tall (aspect 0.82)
+rect_wide,cap_20260930_090833_878_green_m.png,wide seen so slanted it looks square / tall (aspect 0.77)
+rect_wide,cap_20260930_090834_094_green_m.png,wide seen so slanted it looks square / tall (aspect 0.68)
+rect_wide,cap_20260930_090834_407_green_m.png,wide seen so slanted it looks square / tall (aspect 0.64)
+rect_wide,cap_20260930_090834_659_green_m.png,wide seen so slanted it looks square / tall (aspect 0.64)
+rect_wide,cap_20260930_090834_841_green_m.png,wide seen so slanted it looks square / tall (aspect 0.64)
+rect_wide,cap_20260930_090834_990_green_m.png,wide seen so slanted it looks square / tall (aspect 0.64)
+rect_wide,cap_20260930_090835_171_green_m.png,wide seen so slanted it looks square / tall (aspect 0.59)
+rect_wide,cap_20260930_090835_351_green_m.png,wide seen so slanted it looks square / tall (aspect 0.73)
+rect_wide,cap_20260930_090835_558_green_m.png,wide seen so slanted it looks square / tall (aspect 0.82)
+rect_wide,cap_20260930_090835_706_green_m.png,wide seen so slanted it looks square / tall (aspect 0.91)
+rect_wide,cap_20260930_090842_243_blue_m.png,wide seen so slanted it looks square / tall (aspect 0.91)
+rect_wide,cap_20260930_090842_457_blue_m.png,wide seen so slanted it looks square / tall (aspect 0.73)
+rect_wide,cap_20260930_090842_599_blue_m.png,wide seen so slanted it looks square / tall (aspect 0.73)
+rect_wide,cap_20260930_090842_812_blue_m.png,wide seen so slanted it looks square / tall (aspect 0.64)
+rect_wide,cap_20260930_090843_023_blue_m.png,wide seen so slanted it looks square / tall (aspect 0.59)
+rect_wide,cap_20260930_090843_207_blue_m.png,wide seen so slanted it looks square / tall (aspect 0.59)
+rect_wide,cap_20260930_090843_487_blue_m.png,wide seen so slanted it looks square / tall (aspect 0.59)
+rect_wide,cap_20260930_090843_875_blue_m.png,wide seen so slanted it looks square / tall (aspect 0.91)
+rect_wide,cap_20260930_090847_852_blue_m.png,wide seen so slanted it looks square / tall (aspect 0.91)
+rect_wide,cap_20260930_090848_131_blue_m.png,wide seen so slanted it looks square / tall (aspect 0.91)
+rect_wide,cap_20260930_090848_338_blue_m.png,wide seen so slanted it looks square / tall (aspect 0.91)
+rect_wide,cap_20260930_090848_481_blue_m.png,wide seen so slanted it looks square / tall (aspect 0.91)
+circle,cap_20260930_085339_527_red_m.png,near-copy of another example
+circle,cap_20260930_085341_540_red_m.png,near-copy of another example
+circle,cap_20260930_085817_787_yellow_m.png,near-copy of another example
+circle,cap_20260930_085819_573_yellow_m.png,near-copy of another example
+circle,cap_20260930_085819_957_yellow_m.png,near-copy of another example
+circle,cap_20260930_085823_586_yellow_m.png,near-copy of another example
+circle,cap_20260930_085825_041_yellow_m.png,near-copy of another example
+circle,cap_20260930_085826_699_yellow_m.png,near-copy of another example
+circle,cap_20260930_085827_112_yellow_m.png,near-copy of another example
+circle,cap_20260930_085827_295_yellow_m.png,near-copy of another example
+circle,cap_20260930_085831_105_yellow_m.png,near-copy of another example
+circle,cap_20260930_085848_929_green_m.png,near-copy of another example
+circle,cap_20260930_085849_522_green_m.png,near-copy of another example
+circle,cap_20260930_085849_704_green_m.png,near-copy of another example
+circle,cap_20260930_085851_701_green_m.png,near-copy of another example
+circle,cap_20260930_085851_923_green_m.png,near-copy of another example
+circle,cap_20260930_085852_389_green_m.png,near-copy of another example
+circle,cap_20260930_085856_540_green_m.png,near-copy of another example
+circle,cap_20260930_085856_938_green_m.png,near-copy of another example
+circle,cap_20260930_085857_118_green_m.png,near-copy of another example
+circle,cap_20260930_085857_601_green_m.png,near-copy of another example
+circle,cap_20260930_085857_749_green_m.png,near-copy of another example
+circle,cap_20260930_085858_136_green_m.png,near-copy of another example
+circle,cap_20260930_085858_323_green_m.png,near-copy of another example
+circle,cap_20260930_085858_540_green_m.png,near-copy of another example
+circle,cap_20260930_085858_723_green_m.png,near-copy of another example
+circle,cap_20260930_085859_176_green_m.png,near-copy of another example
+circle,f_1790730022.58_0_red_m.png,near-copy of another example
+circle,f_1790730025.68_0_red_m.png,near-copy of another example
+circle,frames_075930_f_1790730022.58_0_red_clear-cut_m.png,near-copy of another example
+circle,frames_075930_f_1790730025.68_0_red_clear-cut_m.png,near-copy of another example
+square,cap_20260930_090116_833_green_m.png,near-copy of another example
+square,cap_20260930_090237_442_blue_m.png,near-copy of another example
+square,cap_20260930_090237_620_blue_m.png,near-copy of another example
+square,cap_20260930_090237_902_blue_m.png,near-copy of another example
+square,cap_20260930_090251_618_blue_m.png,near-copy of another example
+rect_wide,cap_20260930_090456_252_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090456_391_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090507_232_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090507_407_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090507_581_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090507_963_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090508_390_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090508_778_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090508_990_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090509_197_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090509_407_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090611_773_red_m.png,near-copy of another example
+rect_wide,cap_20260930_090612_923_red_m.png,near-copy of another example
+rect_wide,cap_20260930_090620_329_red_m.png,near-copy of another example
+rect_wide,cap_20260930_090620_505_red_m.png,near-copy of another example
+rect_wide,cap_20260930_090620_925_red_m.png,near-copy of another example
+rect_wide,cap_20260930_090621_205_red_m.png,near-copy of another example
+rect_wide,cap_20260930_090621_720_red_m.png,near-copy of another example
+rect_wide,cap_20260930_090621_939_red_m.png,near-copy of another example
+rect_wide,cap_20260930_090725_936_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090726_152_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090726_361_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090726_716_green_m.png,near-copy of another example
+rect_wide,cap_20260930_090737_236_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090738_649_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090741_447_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090741_835_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090743_908_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090744_429_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090744_814_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090744_988_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090749_278_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090750_393_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090756_409_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090757_712_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090811_525_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090811_972_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090812_149_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090812_328_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090812_472_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090812_584_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090812_727_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090812_872_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090813_088_yellow_m.png,near-copy of another example
+rect_wide,cap_20260930_090826_626_green_m.png,near-copy of another example
+rect_wide,cap_20260930_090827_345_green_m.png,near-copy of another example
+rect_wide,cap_20260930_090827_590_green_m.png,near-copy of another example
+rect_wide,cap_20260930_090827_732_green_m.png,near-copy of another example
+rect_wide,cap_20260930_090827_910_green_m.png,near-copy of another example
+rect_wide,cap_20260930_090828_093_green_m.png,near-copy of another example
+rect_wide,cap_20260930_090828_273_green_m.png,near-copy of another example
+rect_wide,cap_20260930_090828_455_green_m.png,near-copy of another example
+rect_wide,cap_20260930_090828_633_green_m.png,near-copy of another example
+rect_wide,cap_20260930_090831_141_green_m.png,near-copy of another example
+rect_wide,cap_20260930_090831_498_green_m.png,near-copy of another example
+rect_wide,cap_20260930_090831_642_green_m.png,near-copy of another example
+rect_wide,cap_20260930_090831_926_green_m.png,near-copy of another example
+rect_wide,cap_20260930_090832_139_green_m.png,near-copy of another example
+rect_wide,cap_20260930_090832_285_green_m.png,near-copy of another example
+rect_wide,cap_20260930_090836_845_green_m.png,near-copy of another example
+rect_wide,cap_20260930_090840_086_blue_m.png,near-copy of another example
+rect_wide,cap_20260930_090840_294_blue_m.png,near-copy of another example
+rect_wide,cap_20260930_090840_512_blue_m.png,near-copy of another example
+rect_wide,cap_20260930_090840_826_blue_m.png,near-copy of another example
+rect_wide,cap_20260930_090841_011_blue_m.png,near-copy of another example
+rect_wide,cap_20260930_090841_331_blue_m.png,near-copy of another example
+rect_wide,cap_20260930_090844_820_blue_m.png,near-copy of another example
+rect_wide,cap_20260930_090845_388_blue_m.png,near-copy of another example
+rect_wide,cap_20260930_090845_536_blue_m.png,near-copy of another example
+rect_wide,cap_20260930_090845_748_blue_m.png,near-copy of another example
+rect_wide,cap_20260930_090846_029_blue_m.png,near-copy of another example
+rect_wide,cap_20260930_090849_262_blue_m.png,near-copy of another example
+rect_wide,cap_20260930_090849_584_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090919_194_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090920_641_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090920_829_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090920_979_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090924_138_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090924_832_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090925_375_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090925_597_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090925_816_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090925_969_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090926_155_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090926_518_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090926_671_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090927_096_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090927_620_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090928_265_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090928_448_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090928_815_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090929_001_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090929_391_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090929_680_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090930_020_green_m.png,near-copy of another example
+rect_tall,cap_20260930_090937_958_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090938_183_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090938_555_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090940_588_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090941_317_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090941_500_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090941_961_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090942_883_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090943_415_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090943_637_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090943_864_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090944_681_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090944_833_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090946_353_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090946_502_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090946_689_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090946_847_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090947_031_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090948_363_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090948_583_blue_m.png,near-copy of another example
+rect_tall,cap_20260930_090948_807_blue_m.png,near-copy of another example
+rect_tall,f_1790729905.96_0_yellow_m.png,near-copy of another example
+rect_tall,f_1790729926.43_0_yellow_m.png,near-copy of another example
+rect_tall,f_1790729927.45_0_yellow_m.png,near-copy of another example
+rect_tall,f_1790729977.55_0_yellow_m.png,near-copy of another example
+rect_tall,f_1790729978.59_0_yellow_m.png,near-copy of another example
+rect_tall,f_1790729980.64_0_yellow_m.png,near-copy of another example
+rect_tall,f_1790729981.68_0_yellow_m.png,near-copy of another example
+rect_tall,frames_075821_f_1790729905.96_0_yellow_unclear_m.png,near-copy of another example
+rect_tall,frames_075821_f_1790729926.43_0_yellow_unclear_m.png,near-copy of another example
+rect_tall,frames_075821_f_1790729927.45_0_yellow_clear-cut_m.png,near-copy of another example
+rect_tall,frames_075930_f_1790729979.61_0_yellow_unclear_m.png,near-copy of another example
+rect_tall,frames_075930_f_1790729980.64_0_yellow_unclear_m.png,near-copy of another example
+rect_tall,frames_075930_f_1790729981.68_0_yellow_unclear_m.png,near-copy of another example
+rect_tall,frames_075930_f_1790729985.80_0_yellow_unclear_m.png,near-copy of another example
+rect_tall,frames_075930_f_1790729986.80_0_yellow_unclear_m.png,near-copy of another example
+rect_tall,frames_075930_f_1790729987.83_0_yellow_unclear_m.png,near-copy of another example
+circle,frames_101024_f_1790737873.57_0_red_map_m.png,has corners like a rectangle
+circle,frames_101024_f_1790737865.38_0_red_clear-cut_m.png,near-copy of another example
+circle,frames_101024_f_1790737907.26_0_red_clear-cut_m.png,near-copy of another example
+rect_tall,frames_101024_f_1790737833.70_0_yellow_map_m.png,near-copy of another example
+rect_tall,frames_101024_f_1790737837.80_0_yellow_map_m.png,near-copy of another example
+rect_tall,frames_101024_f_1790737838.82_0_yellow_map_m.png,near-copy of another example
+rect_tall,frames_101024_f_1790737841.88_0_yellow_map_m.png,near-copy of another example
+rect_tall,frames_101024_f_1790737843.95_0_yellow_map_m.png,near-copy of another example
+circle,frames_101326_f_1790738066.95_0_red_clear-cut_m.png,has corners like a rectangle
+circle,frames_101326_f_1790738188.53_0_green_clear-cut_m.png,has corners like a rectangle
+circle,frames_101326_f_1790738063.85_0_green_clear-cut_m.png,near-copy of another example
+circle,frames_101326_f_1790738067.98_0_red_clear-cut_m.png,near-copy of another example
+circle,frames_101326_f_1790738306.16_0_green_clear-cut_m.png,near-copy of another example
+circle,frames_101326_f_1790738424.95_0_green_clear-cut_m.png,near-copy of another example
+circle,frames_101326_f_1790738425.98_0_green_clear-cut_m.png,near-copy of another example
+circle,frames_101326_f_1790738427.01_0_green_clear-cut_m.png,near-copy of another example
+rect_wide,frames_101326_f_1790738209.03_0_red_clear-cut_m.png,near-copy of another example
+rect_wide,frames_101326_f_1790738210.07_0_red_clear-cut_m.png,near-copy of another example
+rect_tall,frames_101326_f_1790738016.86_0_yellow_clear-cut_m.png,near-copy of another example
+rect_tall,frames_101326_f_1790738017.89_0_yellow_clear-cut_m.png,near-copy of another example
+rect_tall,frames_101326_f_1790738022.98_0_yellow_clear-cut_m.png,near-copy of another example
+rect_tall,frames_101326_f_1790738023.99_0_yellow_clear-cut_m.png,near-copy of another example
+rect_tall,frames_103326_f_1790739278.24_0_yellow_map_m.png,near-copy of another example
+rect_tall,frames_103326_f_1790739279.27_0_yellow_clear-cut_m.png,near-copy of another example
+rect_tall,frames_103326_f_1790739281.35_0_yellow_map_m.png,near-copy of another example

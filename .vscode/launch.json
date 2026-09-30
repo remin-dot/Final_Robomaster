@@ -1,0 +1,137 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Mission panel (Connect screen)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/main_mission.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "IR sensor calibration (demo)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/sharp_calibrate.py",
+            "args": [
+                "--demo"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "IR sensor calibration (robot)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/sharp_calibrate.py",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Sensor check: which port has which sensor (robot)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/sensor_check.py",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Card colour calibration (robot camera)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/color_calibrate.py",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Robot - connect now (round 1)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/main_mission.py",
+            "args": [
+                "--round",
+                "1",
+                "--connect"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Robot - connect now (round 2)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/main_mission.py",
+            "args": [
+                "--round",
+                "2",
+                "--connect"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Webcam - live camera + detection (no robot)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/main_mission.py",
+            "args": [
+                "--source",
+                "webcam",
+                "--connect"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Demo (no robot)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/main_mission.py",
+            "args": [
+                "--source",
+                "demo",
+                "--connect"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Demo - old OpenCV window",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/main_mission.py",
+            "args": [
+                "--source",
+                "demo",
+                "--connect",
+                "--ui",
+                "opencv"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Check robot connection (macOS)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/tools/macos/check_robomaster.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Detector on an image",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/target_vision.py",
+            "args": [
+                "${file}"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        }
+    ]
+}

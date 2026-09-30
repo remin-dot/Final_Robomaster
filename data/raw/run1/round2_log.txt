@@ -1,0 +1,112 @@
+10:13:25 Round 1 started (10:00 limit)
+10:13:25 BLASTER OFF (dry run): it aims but fires NOTHING - tick 'Blaster armed' in Actions
+10:13:26 recording a frame every 1.0 s -> data/raw/run1/frames_101326
+10:13:34 WHEELS NOT ANSWERING while driving: drive commands for 1.2 s, wheels 0 rpm, odometry + yaw frozen - trying to wake the chassis
+10:13:35 chassis answers again - carrying on
+10:13:48 next: (1, 1) (2 moves) - most still unseen per second
+10:13:49 front-left IR triggered while turning - emergency stop
+10:13:49 front-left IR: shift right before retry
+10:14:07 route plan: (1, 0) before (2, 1) - 7 blocks to see, fewer moves in total that way
+10:14:11 camera says wall 0.21 m but ToF 797 mm - trusting the ToF
+10:14:27 route plan: (2, 1) before (3, 0) - 6 blocks to see, fewer moves in total that way
+10:14:33 EMERGENCY STOP: right wall 5 cm, closing 27 cm/s
+10:14:36 recentre: slide 6 cm forward
+10:14:37 next: (1, 2) (2 moves) - most still unseen per second
+10:14:38 front-right IR triggered while turning - emergency stop
+10:14:38 front-right IR: shift left before retry
+10:14:57 recentre: slide 10 cm left
+10:15:06 route plan: (0, 3) before (1, 4) - 6 blocks to see, fewer moves in total that way
+10:15:32 camera says wall 0.33 m but ToF 865 mm - trusting the ToF
+10:15:45 EMERGENCY STOP: right wall 6 cm, closing 16 cm/s
+10:15:51 front-left IR triggered while turning - emergency stop
+10:15:51 front-left IR: shift right before retry
+10:15:55 camera says wall 0.40 m but ToF 866 mm - trusting the ToF
+10:16:01 next: (2, 3) (4 moves) - most still unseen per second
+10:16:09 next: (2, 3) (3 moves) - most still unseen per second
+10:16:09 too close to turn (Sharp L 16 / R 30 cm, front near) - making room first
+10:16:13 front-right IR caution: slowing and steering away
+10:16:16 next: (2, 3) (2 moves) - most still unseen per second
+10:16:31 recentre: slide 10 cm forward
+10:16:32 route plan: (2, 4) before (2, 2) - 4 blocks to see, fewer moves in total that way
+10:16:32 front-left IR triggered while turning - emergency stop
+10:16:32 front-left IR: shift right before retry
+10:16:34 front-right IR triggered while turning - emergency stop
+10:16:34 front-right IR: shift left before retry
+10:16:44 recentre: slide 9 cm left
+10:16:54 recentre: slide 10 cm forward
+10:16:59 camera says wall 0.25 m but ToF 886 mm - trusting the ToF
+10:17:01 EMERGENCY STOP: right wall 6 cm, closing 29 cm/s
+10:17:05 next: (3, 4) (3 moves) - most still unseen per second
+10:17:12 EMERGENCY STOP: right wall 8 cm, closing 17 cm/s
+10:17:15 next: (3, 4) (2 moves) - most still unseen per second
+10:17:15 too close to turn (Sharp L 30 / R 12 cm, front near) - making room first
+10:17:20 EMERGENCY STOP: left wall 7 cm, closing 36 cm/s
+10:17:21 EMERGENCY STOP: right wall 5 cm
+10:17:27 camera says wall 0.25 m but ToF 1648 mm - trusting the ToF
+10:17:29 EMERGENCY STOP: right wall 5 cm, closing 30 cm/s
+10:17:31 corridor (3, 4): walls both sides (Sharp L 14 / R 11 cm), way ahead known - camera left + right only
+10:17:36 camera says wall 0.22 m but ToF 1545 mm - trusting the ToF
+10:17:38 EMERGENCY STOP: right wall 7 cm, closing 16 cm/s
+10:17:42 route plan: (4, 3) before (5, 4) - 6 blocks to see, fewer moves in total that way
+10:17:47 camera says wall 0.31 m but ToF 1714 mm - trusting the ToF
+10:17:49 EMERGENCY STOP: right wall 8 cm, closing 31 cm/s
+10:18:01 route plan: (3, 2) before (4, 1) - 8 blocks to see, fewer moves in total that way
+10:18:13 doorway post / wall end 0.39 m at the right of the way - sliding 5 cm away, checking again
+10:18:21 route plan: (3, 1) before (3, 3) - 8 blocks to see, fewer moves in total that way
+10:18:21 next: (3, 1) (2 moves) - most still unseen per second
+10:18:27 route plan: (3, 1) before (3, 3) - 8 blocks to see, fewer moves in total that way
+10:18:31 doorway post / wall end 0.31 m at the right of the way - sliding 5 cm away, checking again
+10:18:36 EMERGENCY STOP: right wall 7 cm, closing 18 cm/s
+10:18:37 corridor (3, 1): walls both sides (Sharp L 20 / R 10 cm), way ahead known - camera left + right only
+10:18:57 recentre: slide 10 cm forward
+10:18:58 too close to turn (Sharp L 30 / R 12 cm, front clear) - making room first
+10:18:59 front-right IR triggered while turning - emergency stop
+10:18:59 front-right IR: shift left before retry
+10:19:26 camera says wall 0.20 m but ToF 876 mm - trusting the ToF
+10:19:31 next: (5, 2) (4 moves) - most still unseen per second
+10:19:32 front-right IR triggered while turning - emergency stop
+10:19:32 front-right IR: shift left before retry
+10:19:33 front-left IR triggered while turning - emergency stop
+10:19:33 front-left IR: shift right before retry
+10:19:34 front-left IR triggered while turning - emergency stop
+10:19:34 front-left IR: shift right before retry
+10:19:34 turn failed: still -115 deg off
+10:19:34 move (5, 0) -> (5, 1) failed (turn stopped by safety guard), retry 1
+10:19:35 too close to turn (Sharp L 30 / R 13 cm, front near) - making room first
+10:19:42 next: (5, 2) (3 moves) - most still unseen per second
+10:19:42 too close to turn (Sharp L 30 / R 14 cm, front near) - making room first
+10:19:49 next: (5, 2) (2 moves) - most still unseen per second
+10:19:49 too close to turn (Sharp L 30 / R 27 cm, front near) - making room first
+10:19:55 front-right IR caution: slowing and steering away
+10:20:02 camera says wall 0.34 m but ToF 728 mm - trusting the ToF
+10:20:03 EMERGENCY STOP: right wall 8 cm, closing 19 cm/s
+10:20:05 arrived 73% in, wall 217 mm ahead = far wall of this block
+10:20:07 recentre: slide 6 cm forward
+10:20:08 next: (3, 3) (3 moves) - most still unseen per second
+10:20:09 front-right IR triggered while turning - emergency stop
+10:20:09 front-right IR: shift left before retry
+10:20:10 front-left IR triggered while turning - emergency stop
+10:20:10 front-left IR: shift right before retry
+10:20:11 front-right IR triggered while turning - emergency stop
+10:20:11 front-right IR: shift left before retry
+10:20:11 turn failed: still -135 deg off
+10:20:11 move (5, 2) -> (4, 2) failed (turn stopped by safety guard), retry 1
+10:20:11 too close to turn (Sharp L 11 / R 30 cm, front near) - making room first
+10:20:19 next: (3, 3) (2 moves) - most still unseen per second
+10:20:31 next: (4, 5) (5 moves) - most still unseen per second
+10:20:38 next: (4, 5) (4 moves) - most still unseen per second
+10:20:44 next: (4, 5) (3 moves) - most still unseen per second
+10:20:49 next: (4, 5) (2 moves) - most still unseen per second
+10:20:59 recentre: slide 10 cm forward
+10:21:01 front-left IR triggered while turning - emergency stop
+10:21:01 front-left IR: shift right before retry
+10:21:06 camera says wall 0.19 m but ToF 790 mm - trusting the ToF
+10:21:08 arrived 77% in, wall 280 mm ahead = far wall of this block
+10:21:29 all 36 cells visited - exploring done
+10:21:30 Round 1 saved -> data/raw/run1/round1_map.png
+10:21:30 robot released: wheels stopped, wheel speeds 0, gimbal stopped, free mode, gimbal asleep, LEDs idle - carry it to the start and straighten the gimbal by hand
+10:21:38 vision: auto label: circle +16, rect_wide +2, rect_tall +4, none +4, unsure +38 (473 new frames)
+10:21:39 vision: clean: 507 examples, 14 suspect: has corners like a rectangle 2, near-copy of another example 12
+10:21:39 vision: clean: moved 14 to _quarantine/ (restore: roi_clean.py --restore)
+10:21:41 vision: cross-validation (near-copies kept together): 97.0 %  -  circle 106/106, square 107/108 (as {'circle': 1}), rect_wide 149/154 (as {'none': 5}), rect_tall 114/116 (as {'square': 1, 'none': 1}), none 2/9 (as {'circle': 2, 'rect_wide': 2, 'rect_tall': 3})
+10:21:45 vision: auto train: saved (98 % cross-check, 493 clean examples)

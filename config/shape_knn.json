@@ -1,0 +1,19 @@
+{
+  "examples": {
+    "circle": 106,
+    "square": 108,
+    "rect_wide": 154,
+    "rect_tall": 118,
+    "none": 11
+  },
+  "accuracy": 0.954,
+  "time": "2026-09-30 10:36",
+  "holdout": {
+    "circle": "106/106",
+    "square": "107/108",
+    "rect_wide": "148/154",
+    "rect_tall": "113/118",
+    "none": "0/11"
+  },
+  "note": "saved (98 % cross-check, 497 clean examples)"
+}

@@ -1,0 +1,38 @@
+{
+    "red": {
+        "h_min": 177,
+        "h_max": 6,
+        "s_min": 160,
+        "s_max": 255,
+        "v_min": 140,
+        "v_max": 255,
+        "min_area": 800
+    },
+    "green": {
+        "h_min": 70,
+        "h_max": 82,
+        "s_min": 235,
+        "s_max": 255,
+        "v_min": 56,
+        "v_max": 255,
+        "min_area": 0
+    },
+    "blue": {
+        "h_min": 111,
+        "h_max": 123,
+        "s_min": 150,
+        "s_max": 255,
+        "v_min": 64,
+        "v_max": 255,
+        "min_area": 800
+    },
+    "yellow": {
+        "h_min": 19,
+        "h_max": 28,
+        "s_min": 234,
+        "s_max": 255,
+        "v_min": 147,
+        "v_max": 255,
+        "min_area": 800
+    }
+}

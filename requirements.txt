@@ -1,0 +1,8 @@
+numpy<2
+opencv-python>=4.5
+PyYAML>=6.0
+pygame>=2.5
+# DJI only publishes the SDK for Windows / Linux x86_64 with Python 3.6-3.8.
+# On a Mac install it with:  bash tools/macos/setup_robomaster_mac.sh
+# (from RoboFinal: official SDK code + a PyAV video decoder, Python 3.8-3.12).
+robomaster>=0.1.1.68; python_version < "3.9" and (sys_platform == "win32" or (sys_platform == "linux" and platform_machine == "x86_64"))
