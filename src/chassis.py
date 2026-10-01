@@ -193,6 +193,8 @@ class ChassisController:
         self.SCAN_PITCH_DEG = float(vis_cfg.get("scan_pitch_deg", -5.0))
         self.CANDIDATE_CONFIRM_FRAMES = int(vis_cfg.get("candidate_confirm_frames", 5))
         self.CANDIDATE_CONFIRM_MIN_HITS = int(vis_cfg.get("candidate_confirm_min_hits", 2))
+        self.CANDIDATE_RETRY_YAW_DEG = float(vis_cfg.get("candidate_retry_yaw_deg", 8.0))
+        self.CANDIDATE_RETRY_FRAMES = int(vis_cfg.get("candidate_retry_frames", 3))
         self.CAMERA_STALE_S = float(vis_cfg.get("camera_stale_s", 1.0))
         self.CAMERA_RECOVER_WAIT_S = float(vis_cfg.get("camera_recover_wait_s", 3.0))
         self.SLIDE_HOLD_KP = float(move_cfg.get("slide_hold_kp", 2.5))   # sideways slide: pull back front-back drift
@@ -209,6 +211,7 @@ class ChassisController:
         self.ARRIVE_MIN_PROGRESS = float(move_cfg.get("arrive_min_progress", 0.80))
         self.ARRIVE_TOF_MM = float(move_cfg.get("arrive_tof_mm", 280))
         self.verify_pitch_deg = float(vis_cfg.get("verify_pitch_deg", -10.0))   # close look: camera down
+        self.CLOSE_PITCH_MIN_DEG = max(-20.0, float(vis_cfg.get("close_pitch_min_deg", -20.0)))
         self.verify_enabled = bool(vis_cfg.get("verify_sweep", True))
         self._swept_cells = set()       # blocks that had their full close look
         self._guesses = []              # maybe-cards seen (cut by the picture edge / odd outline)
@@ -219,6 +222,10 @@ class ChassisController:
         shoot_cfg = config.get("shooting", {}) or {}
         # shoot only a card in this block or the block right next to it (never across a block)
         self.reach_cells = int(shoot_cfg.get("reach_cells", 1))
+        self.fire_range_margin = min(1.0, max(0.5, float(shoot_cfg.get("fire_range_margin", 0.90))))
+        self.fire_max_cells = max(0, int(shoot_cfg.get("fire_max_cells", 1)))
+        self.route_target_spots = max(1, int(shoot_cfg.get("route_target_spots", 2)))
+        self.card_aim_height_m = float(shoot_cfg.get("card_aim_height_m", 0.14))
         import route_planner
         route_planner.REACH_CELLS = self.reach_cells
         route_planner.REACH_PATTERN = str(shoot_cfg.get("reach_pattern", "3x3")).lower()
@@ -227,6 +234,8 @@ class ChassisController:
         self._tried_inside = set()      # (card id, block) - shot at from inside its own block already
         self._retried = set()           # card ids given a second go at the end of round 1
         self._tried_from = set()        # (card id, block) - aimed at from that block already
+        self._aim_attempts = {}          # (card id, block) -> real shooter engagements
+        self.AIM_ATTEMPTS_PER_CELL = max(1, int(shoot_cfg.get("aim_attempts_per_cell", 2)))
         self.MIN_SHOOT_M = float(shoot_cfg.get("min_shoot_m", 0.3))      # closer: back off first
         # best angle: a shot farther than good_shot_m or more slanted than good_shot_view_deg
         # waits when a block still to be explored gives a near, face-on shot (last run: 1.19 m
@@ -236,6 +245,8 @@ class ChassisController:
         self.BACK_OFF_M = float(shoot_cfg.get("back_off_max_m", 0.08))   # room inside a block
         self.SHOOT_SEARCH_OFFSETS = tuple(
             float(x) for x in shoot_cfg.get("search_offsets_deg", [0, -12, 12]))
+        self.CLOSE_SHOOT_SEARCH_OFFSETS = tuple(
+            float(x) for x in shoot_cfg.get("close_search_offsets_deg", [0, -8, 8]))
         # end of round 1: drive back to cards that were found but not hit yet
         self.mop_up = bool(shoot_cfg.get("mop_up_round1", True))
         self.MOP_UP_RESERVE_S = float(shoot_cfg.get("mop_up_reserve_s", 90))
@@ -682,6 +693,18 @@ class ChassisController:
                 else (time.time() - t0) * speed
             if traveled >= dist_m - 0.01:
                 break
+            # This move is often an IR escape. Watch the side it moves toward so an
+            # off-centre chassis cannot escape one wall by touching the opposite wall.
+            left_cm, right_cm = self.ir.latest()
+            side = None
+            angle = rel_deg % 360.0
+            if 45.0 <= angle <= 135.0:
+                side, gap = "right", right_cm
+            elif 225.0 <= angle <= 315.0:
+                side, gap = "left", left_cm
+            if side is not None and self.ir.usable(side) and gap <= self.SIDE_SAFE_CM:
+                self._log(f"nudge stopped: {side} wall {gap:.0f} cm")
+                break
             z = max(min(wrap180(hold - self.current_yaw) * self.KP_YAW_HOLD, 30), -30) * self.z_sign
             self.ep_chassis.drive_speed(x=vx, y=vy, z=z)
             time.sleep(0.05)
@@ -807,7 +830,16 @@ class ChassisController:
         feed the SDK's moveto action is used."""
         if self.gimbal_hist and time.time() - self.gimbal_hist[-1][0] < 0.3 and \
                 (self.PITCH_BY_SPEED or abs(pitch - self.gimbal_hist[-1][1]) < self.GIMBAL_TOL_DEG):
-            return self._gimbal_drive_to(pitch, yaw, pitch_speed, yaw_speed, what)
+            if self._gimbal_drive_to(pitch, yaw, pitch_speed, yaw_speed, what):
+                return True
+            # A live angle feed does not guarantee that speed-mode control is usable. In
+            # particular, just after resume the feed can be fresh while drive_speed is ignored
+            # or briefly inconsistent. Falling straight through used to make every direction
+            # in the first map scan unknown, so the planner declared the start cell to be the
+            # whole reachable map. Do not start a fallback command after an emergency STOP.
+            if self.panel is not None and self.panel.abort.is_set():
+                return False
+            self._log(f"gimbal {what}: speed control did not settle - retrying with SDK moveto")
         try:
             action = self.ep_gimbal.moveto(pitch=pitch, yaw=yaw,
                                            pitch_speed=pitch_speed, yaw_speed=yaw_speed)
@@ -2003,15 +2035,23 @@ class ChassisController:
         aimed = False
         for det in found:
             tid = getattr(det, "target_id", None)
-            in_range = det.distance_m is not None and det.distance_m <= self.panel.detector.max_shoot_m
+            in_range = (det.distance_m is not None and
+                        det.distance_m <= self.panel.detector.max_shoot_m * self.fire_range_margin)
             if not (in_range and tid and self.panel.should_shoot(tid)):   # selected kinds, shape sure
+                continue
+            target = self.panel.map._target_view(self.panel.map.targets[tid])
+            tc = tuple(target["cell"])
+            if max(abs(tc[0] - pos[0]), abs(tc[1] - pos[1])) > self.fire_max_cells:
+                self.panel.log(f"{tid} visible but more than {self.fire_max_cells} cell away - move closer")
                 continue
             twin = self.panel.map.hit_twin(tid)
             if twin:
                 self.panel.log(f"{tid} is {twin} again (already hit) - merged, not shooting twice")
                 continue
-            if (tid, tuple(pos)) in self._tried_from:
-                continue                       # one complete aim/fire sequence per target per cell
+            attempt_key = (tid, tuple(pos))
+            if attempt_key in self._tried_from or \
+                    self._aim_attempts.get(attempt_key, 0) >= self.AIM_ATTEMPTS_PER_CELL:
+                continue
             # This is a fresh, full-card camera detection with a measured distance inside the
             # assignment's two-tile limit.  Do not let the map's cell/wall classification veto
             # it: cards hang on walls, so the target point can legitimately be assigned to the
@@ -2020,12 +2060,12 @@ class ChassisController:
             if self._wait_for_better_spot(pos, tid):
                 continue
             kind = self.panel.map.targets[tid]["kind"]   # the map's (voted) kind
-            self._tried_from.add((tid, tuple(pos)))
             if aimed:
                 # the last aim turned the gimbal: back to where this look saw the cards
                 self._gimbal_moveto(pitch=pitch, yaw=gimbal_relative_yaw, pitch_speed=min(240, self.GIMBAL_DPS),
                                     yaw_speed=self.GIMBAL_DPS, what="return to target scan")
             aimed = True
+            self._aim_attempts[attempt_key] = self._aim_attempts.get(attempt_key, 0) + 1
             expect = (det.bearing_deg, det.elevation_deg)      # this card, not another of its colour
             if det.distance_m < self.MIN_SHOOT_M and self.BACK_OFF_M > 0:
                 # too close to hit reliably (0.21 m: 5 misses): slide away from it a little
@@ -2034,10 +2074,24 @@ class ChassisController:
                 back = min(self.BACK_OFF_M, self.MIN_SHOOT_M + 0.03 - det.distance_m)
                 self.panel.log(f"{tid} only {det.distance_m:.2f} m away - backing off {back * 100:.0f} cm to shoot")
                 moved = self.nudge(away, back)
-                self.shooter.engage(kind, tid, expect)
+                success = self.shooter.engage(kind, tid, expect)
                 self.nudge(wrap180(away + 180.0), moved)
+                target_now = self.panel.map.targets.get(tid)
+                done = success or target_now is None or self._card_done(
+                    self.panel.map._target_view(target_now))
+                if done or self._aim_attempts[attempt_key] >= self.AIM_ATTEMPTS_PER_CELL:
+                    self._tried_from.add(attempt_key)
+                if tuple(target["cell"]) == tuple(pos):
+                    self._tried_inside.add((tid, tuple(pos)))
                 continue
-            self.shooter.engage(kind, tid, expect)
+            success = self.shooter.engage(kind, tid, expect)
+            target_now = self.panel.map.targets.get(tid)
+            done = success or target_now is None or self._card_done(
+                self.panel.map._target_view(target_now))
+            if done or self._aim_attempts[attempt_key] >= self.AIM_ATTEMPTS_PER_CELL:
+                self._tried_from.add(attempt_key)
+            if tuple(target["cell"]) == tuple(pos):
+                self._tried_inside.add((tid, tuple(pos)))
         # back to the scan direction (engage may have moved the gimbal)
         if found:
             self._gimbal_moveto(pitch=pitch, yaw=gimbal_relative_yaw, yaw_speed=180,
@@ -2101,12 +2155,19 @@ class ChassisController:
                 continue
             self._candidate_checked.add(key)
             glimpses.append(s1)
-            break                         # one focused candidate check per settled map look
+            # More than one card can be visible from a cell.  The old unconditional break
+            # discarded every candidate after the first one (commonly a selected red square
+            # beside another coloured card).  Keep this bounded so detection remains fast.
+            if len(glimpses) >= max(1, self.MOTION_CHECKS):
+                break
         for s1 in glimpses:
             if not p.checkpoint():
                 break
             yaw = wrap180(g_yaw + s1["bearing"])
-            pit = max(-20.0, min(20.0, pitch + s1["elevation"]))
+            # A very close card otherwise sits behind the barrel/bottom crop.
+            # Point farther down so the whole card moves into the image before
+            # shape confirmation; -25 deg is the RoboMaster gimbal's lower limit.
+            pit = max(self.CLOSE_PITCH_MIN_DEG, min(20.0, pitch + s1["elevation"]))
             if not self._gimbal_moveto(pitch=pit, yaw=yaw, pitch_speed=min(240, self.GIMBAL_DPS),
                                        yaw_speed=self.GIMBAL_DPS, what="verify glimpse"):
                 continue
@@ -2120,10 +2181,41 @@ class ChassisController:
             hits = int(getattr(self, "CANDIDATE_CONFIRM_MIN_HITS", 2))
             got = p.observe_targets(pos, abs_deg, tof_mm=self.current_tof_dist_mm if abs(pit) < 1 else None,
                                     settle_ts=time.time(), frames=frames, min_hits=hits)
-            hit = [d for d in got if (s1.get("kind") and d.kind == s1["kind"]) or
-                   d.color == s1["color"]]
+
+            def intended(ds):
+                return [d for d in ds if (s1.get("kind") and d.kind == s1["kind"]) or
+                        d.color == s1["color"]]
+
+            hit = intended(got)
+            # A sighting made while the gimbal/chassis was moving is delayed by the video
+            # pipeline.  Its estimated yaw is often a few degrees stale; at close range that
+            # is enough to put a 7 cm square outside the next frame.  Search only the two
+            # neighbouring angles, only after a real colour/card candidate, and stop as soon
+            # as the intended colour is confirmed.  This replaces expensive full re-sweeps.
+            if not hit and self.CANDIDATE_RETRY_YAW_DEG > 0:
+                side_frames = max(2, self.CANDIDATE_RETRY_FRAMES)
+                side_hits = min(hits, max(1, side_frames - 1))
+                for off in (-self.CANDIDATE_RETRY_YAW_DEG, self.CANDIDATE_RETRY_YAW_DEG):
+                    if not p.checkpoint():
+                        break
+                    retry_yaw = wrap180(yaw + off)
+                    if not self._gimbal_moveto(pitch=pit, yaw=retry_yaw,
+                                               pitch_speed=min(240, self.GIMBAL_DPS),
+                                               yaw_speed=self.GIMBAL_DPS,
+                                               what="recover moving target direction"):
+                        continue
+                    retry_abs = (chassis_abs + retry_yaw) % 360
+                    extra = p.observe_targets(
+                        pos, retry_abs,
+                        tof_mm=self.current_tof_dist_mm if abs(pit) < 1 else None,
+                        settle_ts=time.time(), frames=side_frames, min_hits=side_hits,
+                    )
+                    got += extra
+                    hit = intended(extra)
+                    if hit:
+                        break
             label = s1.get("kind") or f"{s1['color']} candidate"
-            p.log(f"{label} seen briefly - still-frame check: {'confirmed' if hit else 'nothing there'}")
+            p.log(f"{label} seen briefly - focused check: {'confirmed' if hit else 'nothing there'}")
             out += got
         if glimpses:
             # back to where this look was pointing
@@ -2190,12 +2282,14 @@ class ChassisController:
             for g in looks or (-90, 0, 90, 180):
                 if not p.checkpoint() or (p.round_t0 and p.remaining() <= 0):
                     break
-                # tilt for THIS wall: -10 deg suits a wall ~0.2 m from the ToF; a farther wall
-                # needs less (the card would sit at the top edge), a nearer one more
+                # Aim at the expected card centre on THIS wall. The old scaled -10 deg look
+                # was only -15 deg at 20 cm, leaving a low close card behind the barrel.
                 mm = dists.get(lab[g])
                 pit = pitch
                 if mm and 60 < mm < 2000:
-                    pit = max(-20.0, min(-3.0, pitch * min(1.6, max(0.3, 200.0 / mm))))
+                    cam_h = float((self.config.get("vision", {}) or {}).get("camera_height_m", 0.25))
+                    pit = math.degrees(math.atan2(self.card_aim_height_m - cam_h, mm / 1000.0))
+                    pit = max(self.CLOSE_PITCH_MIN_DEG, min(-3.0, pit))
                 if not self._gimbal_moveto(pitch=pit, yaw=g, pitch_speed=120,
                                            yaw_speed=180, what="close-look sweep"):
                     continue
@@ -2531,6 +2625,8 @@ class ChassisController:
         driven = driven_edges(round_data)   # a wall on an edge the robot drove through is a misreading
         graph = GridGraph(nx, ny, parse_edges(round_data.get("walls")) - driven,
                           parse_edges(round_data.get("open_edges")) | driven)
+        # firing_cells already applies the same 0.90 planning margin; pass the
+        # assignment limit here so it is applied exactly once (1.20 -> 1.08 m).
         max_m = panel.detector.max_shoot_m
         pos = tuple(pos)
         start = pos
@@ -2635,7 +2731,7 @@ class ChassisController:
                     rel = wrap180(a - deg[heading])
                     # a card in this block is close and below the camera: look down at it
                     near_m = math.hypot(t["x_m"] - (pos[0] + 0.5) * tile, t["y_m"] - (pos[1] + 0.5) * tile)
-                    pitch = self.verify_pitch_deg if near_m < 0.5 else 0.0
+                    pitch = self._target_search_pitch(t, pos, near_m)
                     near = dict(kind=t["kind"], x_m=t["x_m"], y_m=t["y_m"], radius_m=0.6)
 
                     def hit():
@@ -2649,7 +2745,9 @@ class ChassisController:
                         return tid is not None and (self.shooter is None or tid in self.shooter.dry_locked)
 
                     done = hit()
-                    for off in (0, -15, 15, -30, 30):
+                    # Round 1 already supplied the bearing. One direct look is enough;
+                    # a miss may try one alternate firing cell, not five head angles.
+                    for off in (0,):
                         if done or not time_left():
                             break
                         g = wrap180(rel + off)
@@ -2670,7 +2768,7 @@ class ChassisController:
                     else:
                         exclude[t["id"]].add(tuple(pos))
                         panel.log(f"{t['id']} not hit from {pos}, trying another spot")
-                        if len(exclude[t["id"]]) >= 3:
+                        if len(exclude[t["id"]]) >= self.route_target_spots:
                             panel.log(f"giving up on {t['id']}")
                             remaining.remove(t)
                 self.reset_gimbal()
@@ -2922,6 +3020,18 @@ class ChassisController:
         rel_name = {0: "front", 1: "right", 2: "back", 3: "left"}
         choice = None
         hard = self._hard_card_blocks()          # cards at a hard angle: shot from inside their block
+        # A selected target that could not be fired at from the discovery view takes
+        # priority now. Enter its block and look straight/down before continuing the
+        # coverage tour; delaying this until mop-up is why visible squares were passed.
+        # During full-map Round 1, never drive back toward a wall-mounted target merely to
+        # improve its view. Live detections shoot immediately; otherwise normal coverage will
+        # reach the cell. This avoids target-induced wall approaches and ping-pong routes.
+        hard_reachable = [] if visit_all else [(reach[c][0], c, reach[c][1]) for c in hard
+                                               if c in reach and c != tuple(pos)]
+        if hard_reachable:
+            _, c, st = min(hard_reachable, key=lambda x: (x[0], x[1]))
+            self._log(f"target priority: go to {c} now for a direct in-cell look and shot")
+            return c, path_to(st)
         for c, (t, st) in reach.items():
             if c == tuple(pos):
                 continue
@@ -3110,15 +3220,15 @@ class ChassisController:
         for t in todo:
             if not p.checkpoint() or (p.round_t0 and p.remaining() <= 0):
                 break
-            self._tried_from.add((t["id"], tuple(pos)))          # once per card per block
-            if tuple(t["cell"]) == tuple(pos):
-                self._tried_inside.add((t["id"], tuple(pos)))
+            own_cell = tuple(t["cell"]) == tuple(pos)
             a = math.degrees(math.atan2(t["x_m"] - cx, t["y_m"] - cy))
             g = wrap180(a - heading * 90)
             near_m = math.hypot(t["x_m"] - cx, t["y_m"] - cy)
-            pitch = self.verify_pitch_deg if near_m < 0.5 else 0.0     # in this block: look down at it
+            pitch = self._target_search_pitch(t, pos, near_m)
             p.log(f"shooting {t['id']} from {tuple(pos)}" + (" (inside its block, camera down)" if pitch else ""))
-            for off in self.SHOOT_SEARCH_OFFSETS:
+            offsets = self.CLOSE_SHOOT_SEARCH_OFFSETS if own_cell or near_m < 0.55 \
+                else self.SHOOT_SEARCH_OFFSETS
+            for off in offsets:
                 if not self._gimbal_moveto(pitch=pitch, yaw=wrap180(g + off), pitch_speed=min(240, self.GIMBAL_DPS),
                                            yaw_speed=self.GIMBAL_DPS, what="shoot-here search"):
                     continue
@@ -3128,6 +3238,18 @@ class ChassisController:
                 tt = p.map.targets.get(t["id"])
                 if tt is None or tt["shot"]:
                     break
+            # Mark only after the camera/shooter path above actually ran. The previous code
+            # marked _tried_from before _look_for_targets, causing that function to skip the
+            # shot entirely. A failed own-cell look is bounded here so routing cannot bounce
+            # out of and back into the same IR-tight cell forever.
+            if own_cell:
+                self._tried_inside.add((t["id"], tuple(pos)))
+
+    def _target_search_pitch(self, target, pos, distance_m):
+        """Pitch toward card centre; fixed -10 deg hid 20-35 cm cards below the frame."""
+        cam_h = float((self.config.get("vision", {}) or {}).get("camera_height_m", 0.25))
+        pitch = math.degrees(math.atan2(self.card_aim_height_m - cam_h, max(distance_m, 0.2)))
+        return max(self.CLOSE_PITCH_MIN_DEG, min(-2.0, pitch))
 
     def _corridor_known(self, pos, heading, d, prev, scan_cache, driven, blocked, max_x, max_y, tile):
         """Arrived in `pos` driving forward / back in map direction d. When the side Sharps saw
@@ -3431,6 +3553,7 @@ class ChassisController:
         self._not_cards, self._looked_back, self._guesses = [], set(), []
         self._candidate_checked = set()
         self._tried_inside, self._tried_from, self._retried = set(), set(), set()
+        self._aim_attempts = {}
         scan_cache = {}       # (x, y) -> {map dir: ToF mm} (scanned once per cell)
         direct_scan_dirs = {} # directions physically measured here (not inferred/came-from)
         entry_heading = {}    # (x, y) -> heading when the robot first arrived there
@@ -3489,6 +3612,16 @@ class ChassisController:
 
                 rescanned = False
                 if (x, y) not in scan_cache:
+                    # Do not inspect a close target while the chassis is 5-8 cm from
+                    # a side wall: the barrel/crop hides it and the next turn can clip
+                    # the foam. Correct dangerous lateral offset before taking pictures.
+                    if self.ir.mount == "side":
+                        l0, r0 = self._control_side_ir()
+                        if any(v is not None and v < self.SIDE_SAFE_CM + 2.0 for v in (l0, r0)):
+                            self._log(f"off-centre before scan (Sharp L {l0 or 0:.0f} / R {r0 or 0:.0f} cm) "
+                                      "- centring before target detection")
+                            self._center_in_cell(self.heading_to_yaw(heading),
+                                                 duration=max(2.0, self.CENTER_TIME_S))
                     scan_started = time.time()
                     # the way it came in is known open: not looked at again (the block behind
                     # was looked at from inside already)
@@ -3504,6 +3637,12 @@ class ChassisController:
                         self._log(f"corridor {(x, y)}: walls both sides (Sharp L {corridor[1][0]:.0f} / "
                                   f"R {corridor[1][1]:.0f} cm), way ahead known - camera left + right only")
                     surrounding = self.scan_surroundings_with_gimbal(known=known)
+                    # STOP/Finish can arrive while a multi-direction scan is in progress.
+                    # Never cache or announce a partly aborted scan as SCAN_DONE: zero readings
+                    # then leave no open edge and used to make a 6x6 map finish at the start.
+                    if self.panel is not None and not self.panel.checkpoint():
+                        self.panel.log(f"scan cancelled at cell={(x, y)} - map result discarded")
+                        break
                     if self.panel is not None:
                         self.panel.log(f"SCAN_DONE cell={(x, y)} elapsed={time.time() - scan_started:.2f}s "
                                        f"mode={'sweep' if self.SWEEP_SCAN else 'stops'}")
@@ -3513,7 +3652,9 @@ class ChassisController:
                                           for rel, off in (("front", 0), ("right", 1), ("back", 2), ("left", 3))}
                     rel_off = {"front": 0, "right": 1, "back": 2, "left": 3}
                     direct_scan_dirs[(x, y)] = {
-                        (heading + off) % 4 for rel, off in rel_off.items() if rel not in known
+                        (heading + off) % 4 for rel, off in rel_off.items()
+                        if rel not in known and surrounding.get(rel) is not None and
+                        surrounding.get(rel) >= 60
                     }
                     self.recenter(surrounding)          # back to the middle of the block
                 surrounding = {rel: scan_cache[(x, y)][(heading + off) % 4]

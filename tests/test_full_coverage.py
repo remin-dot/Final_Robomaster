@@ -2,6 +2,7 @@ import os
 import sys
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -23,7 +24,7 @@ class FullCoverageTests(unittest.TestCase):
         controller._unseen_faces = lambda *args: ([], 0)
         return controller
 
-    def test_unvisited_cell_wins_over_hard_target_revisit(self):
+    def test_full_coverage_does_not_revisit_target_cell_just_to_get_closer(self):
         controller = self.controller()
         controller._hard_card_blocks = lambda: {(1, 0)}
 
@@ -95,6 +96,119 @@ class FullCoverageTests(unittest.TestCase):
         controller._look_for_targets(0, settle_ts=123.0)
 
         self.assertEqual(seen, [123.0])
+
+    def test_two_candidates_are_checked_and_stale_yaw_is_recovered(self):
+        """Do not discard a red square because another candidate was queued first."""
+        looks = []
+        red_square = SimpleNamespace(kind="red square", color="red")
+
+        class Map:
+            targets = {}
+
+            @staticmethod
+            def project(_pos, _angle, _dist):
+                return 0.3, 0.3
+
+            @staticmethod
+            def _find_card(*_args, **_kwargs):
+                return None
+
+        class Panel:
+            detector = SimpleNamespace(gimbal_pitch_deg=0.0)
+            map = Map()
+            last_guesses = []
+            last_single = [
+                {"kind": "blue circle", "color": "blue", "bearing": -20.0,
+                 "elevation": 0.0, "distance": 0.4},
+                {"kind": "red square", "color": "red", "bearing": 20.0,
+                 "elevation": 0.0, "distance": 0.4},
+            ]
+
+            @staticmethod
+            def checkpoint():
+                return True
+
+            @staticmethod
+            def observe_targets(_pos, angle, **_kwargs):
+                looks.append(round(angle))
+                # The moving frame was 8 degrees stale; the right-hand retry finds it.
+                return [red_square] if round(angle) == 28 else []
+
+            @staticmethod
+            def log(_msg):
+                pass
+
+        controller = ChassisController.__new__(ChassisController)
+        controller.panel = Panel()
+        controller._candidate_checked = set()
+        controller.MOTION_CHECKS = 2
+        controller.CLOSE_PITCH_MIN_DEG = -25.0
+        controller.GIMBAL_DPS = 200.0
+        controller.CANDIDATE_CONFIRM_FRAMES = 5
+        controller.CANDIDATE_CONFIRM_MIN_HITS = 2
+        controller.CANDIDATE_RETRY_YAW_DEG = 8.0
+        controller.CANDIDATE_RETRY_FRAMES = 3
+        controller.current_tof_dist_mm = 900
+        controller._gimbal_moveto = lambda **_kwargs: True
+
+        with patch("chassis.time.sleep"):
+            found = controller._check_glimpses((0, 0), 0, 0.0, -5.0)
+
+        self.assertIn(340, looks)  # first candidate was checked
+        self.assertIn(20, looks)   # second candidate was not discarded
+        self.assertIn(28, looks)   # bounded yaw recovery found the delayed red square
+        self.assertEqual(found, [red_square])
+
+    def test_shoot_here_does_not_mark_target_tried_before_camera_can_fire(self):
+        target = {
+            "id": "red square", "kind": "red square", "cell": [1, 1],
+            "x_m": 0.9, "y_m": 0.9, "shot": False,
+        }
+
+        class Map:
+            tile = 0.6
+            targets = {"red square": target}
+
+            @staticmethod
+            def target_list():
+                return [target]
+
+            @staticmethod
+            def in_reach(*_args):
+                return True
+
+        panel = SimpleNamespace(
+            map=Map(), selected={"red square"}, round_t0=None,
+            checkpoint=lambda: True, remaining=lambda: 600,
+            log=lambda _msg: None,
+        )
+        controller = ChassisController.__new__(ChassisController)
+        controller.panel = panel
+        controller.shooter = object()
+        controller.reach_cells = 1
+        controller.shoot_order = "fastest"
+        controller._tried_from = set()
+        controller._tried_inside = set()
+        controller.CLOSE_SHOOT_SEARCH_OFFSETS = (0.0,)
+        controller.SHOOT_SEARCH_OFFSETS = (0.0,)
+        controller.CLOSE_PITCH_MIN_DEG = -25.0
+        controller.card_aim_height_m = 0.14
+        controller.config = {"vision": {"camera_height_m": 0.25}}
+        controller.GIMBAL_DPS = 200.0
+        controller._card_done = lambda _t: False
+        controller._gimbal_moveto = lambda **_kwargs: True
+        controller._draw_live_with_gimbal = lambda _yaw: None
+        checked = []
+
+        def look(*_args, **_kwargs):
+            checked.append(("red square", (1, 1)) in controller._tried_from)
+            return []
+
+        controller._look_for_targets = look
+        controller.shoot_here((1, 1), 0)
+
+        self.assertEqual(checked, [False])
+        self.assertIn(("red square", (1, 1)), controller._tried_inside)
 
 
 if __name__ == "__main__":

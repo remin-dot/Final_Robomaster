@@ -514,16 +514,29 @@ class MissionMap:
             t["confirmed"] = t["n"] >= need
             votes = t.setdefault("votes", {})
             votes[shape] = votes.get(shape, 0.0) + w * cos_v ** 4   # face-on views decide
+            target_cell = (min(max(int(tx / self.tile), 0), self.nx - 1),
+                           min(max(int(ty / self.tile), 0), self.ny - 1))
+            # A wall-mounted card 35 cm ahead projects just across the grid boundary, so its
+            # map cell may be the current cell or its immediate neighbour even though this is
+            # the robot's direct point-blank inspection.
+            local_close = (max(abs(target_cell[0] - rc[0]), abs(target_cell[1] - rc[1])) <= 1
+                           and dist_m <= 0.55)
             if view_deg is not None:
                 t["best_view_deg"] = min(t.get("best_view_deg", 90.0), abs(view_deg))
-            elif dist_m < 0.6:   # wall unclear (corner) but close: count agreeing close looks
+            # At point-blank range the map's inferred wall normal can be wrong by one edge,
+            # especially before centring.  Several settled full-card frames in the card's
+            # own cell are stronger shape evidence than that noisy normal.  This lets a real
+            # red square proceed to the shooter's fresh lock instead of staying SHAPE?.
+            if view_deg is None or local_close:
                 near = t.setdefault("near_unknown", {})
                 near[shape] = near.get(shape, 0) + evidence
             if dist_m < t["best_dist"]:
                 t["best_dist"] = dist_m
                 t["seen_from"] = tuple(robot_cell)
             win = max(votes, key=votes.get)
-            if win != t["shape"] and not t["shot"]:
+            # In round 2 the round-1 identity is the authority. A single oblique
+            # frame can make wide/square/tall rectangles look alike.
+            if win != t["shape"] and not t["shot"] and not t.get("loaded_from_round1"):
                 old = t["id"]
                 tid = self._reshape(old, win)
                 self._log_shape = (old, tid)
@@ -556,7 +569,11 @@ class MissionMap:
                         lim = self._merge_radius(e, same) if same else 0.4
                         if d > lim:
                             continue
-                        keep, drop = (a, b) if (a["shot"], a["n"]) >= (b["shot"], b["n"]) else (b, a)
+                        # A round-1 identity must survive a duplicate fresh observation:
+                        # its id/kind is what the round-2 route and selection refer to.
+                        rank_a = (bool(a.get("loaded_from_round1")), a["shot"], a["n"])
+                        rank_b = (bool(b.get("loaded_from_round1")), b["shot"], b["n"])
+                        keep, drop = (a, b) if rank_a >= rank_b else (b, a)
                         ids = (keep["id"], drop["id"])
                         self._absorb(keep, drop)          # may rename keep (shape vote)
                         if tid in ids:
@@ -573,6 +590,8 @@ class MissionMap:
             keep[k] += drop[k]
         keep["n"] += drop["n"]
         keep["shot"] = keep["shot"] or drop["shot"]
+        keep["loaded_from_round1"] = bool(keep.get("loaded_from_round1") or
+                                           drop.get("loaded_from_round1"))
         need = self.required_observations(keep["shape"])
         keep["confirmed"] = keep.get("confirmed") or drop.get("confirmed") or keep["n"] >= need
         for c, dd in drop.get("views", {}).items():
@@ -586,7 +605,7 @@ class MissionMap:
             keep[k] = keep.get(k) or drop.get(k)
         self.targets.pop(drop["id"], None)
         self.shots = [(keep["id"] if sid == drop["id"] else sid, c, ts) for sid, c, ts in self.shots]
-        if not keep["shot"]:
+        if not keep["shot"] and not keep.get("loaded_from_round1"):
             win = max(keep["votes"], key=keep["votes"].get) if keep.get("votes") else keep["shape"]
             if win != keep["shape"]:
                 self._reshape(keep["id"], win)
@@ -616,6 +635,8 @@ class MissionMap:
             t = self.targets.get(tid)
             if t is None:
                 return None
+            if t.get("loaded_from_round1"):
+                return tid
             t.setdefault("votes", {})[shape] = t["votes"].get(shape, 0.0) + 50.0
             t["measured"] = shape
             if shape != t["shape"] and not t["shot"]:
@@ -804,7 +825,12 @@ class MissionMap:
             }
 
     def load_round(self, data):
-        """Round 2: take grid size, walls and targets from the round-1 JSON."""
+        """Round 2: take the map and live target identities from round 1.
+
+        Targets used to be copied only to the drawing store, while the shooter
+        reads the live target store. Seed both and reset shot state because
+        round 2 is a new scoring round.
+        """
         from route_planner import parse_edges
         with self.lock:
             self.nx, self.ny = data["grid_size"]
@@ -821,11 +847,40 @@ class MissionMap:
             self.open_edges |= driven
             self.walls -= self.open_edges
             self.known = {}
+            self.targets = {}
             for t in data.get("targets", []):
                 if t.get("confirmed", True):
                     t.setdefault("kind", kind_of(t["color"], t["shape"]))  # files from before kinds
                     t.setdefault("id", t["kind"])
-                    self.known[t["id"]] = t
+                    saved = dict(t)
+                    saved["shot"] = False
+                    saved["missed"] = False
+                    self.known[saved["id"]] = saved
+
+                    x_m, y_m = float(saved["x_m"]), float(saved["y_m"])
+                    n = max(self.required_observations(saved["shape"]),
+                            int(saved.get("observations", 1)))
+                    prior = max(4.0, float(n))
+                    views = {tuple(v["cell"]): float(v.get("dist_m", 0.0))
+                             for v in saved.get("views", []) if v.get("cell") is not None}
+                    seen_from = tuple(saved.get("seen_from") or saved.get("cell") or self.start)
+                    best_dist = float(saved.get("best_dist_m") or
+                                      views.get(seen_from) or self.tile)
+                    votes = dict(saved.get("shape_votes") or {})
+                    votes[saved["shape"]] = max(float(votes.get(saved["shape"], 0.0)),
+                                                 max(votes.values(), default=0.0) + prior)
+                    self.targets[saved["id"]] = {
+                        "id": saved["id"], "kind": saved["kind"],
+                        "color": saved["color"], "shape": saved["shape"],
+                        "sx": x_m * prior, "sy": y_m * prior, "sw": prior,
+                        "n": n, "shot": False, "missed": False,
+                        "first_seen": float(saved.get("first_seen", 0.0)),
+                        "seen_from": seen_from, "best_dist": best_dist,
+                        "views": views, "votes": votes,
+                        "best_view_deg": float(saved.get("best_view_deg", 0.0)),
+                        "confirmed": True, "verified": True,
+                        "loaded_from_round1": True,
+                    }
 
     def set_plan(self, legs):
         with self.lock:
@@ -1380,8 +1435,18 @@ class MissionPanel:
                 self._reject(d, "outside the maze")
                 continue
             if not self.map.visible_from(robot_cell, x_m, y_m):
-                self._reject(d, "behind a mapped wall")
-                continue
+                # A close, multi-frame full-card observation is stronger evidence than
+                # a noisy wall edge. Projection error can put a wall-mounted card a few
+                # centimetres on the far side of that edge.
+                tc = (min(max(int(x_m / self.map.tile), 0), self.map.nx - 1),
+                      min(max(int(y_m / self.map.tile), 0), self.map.ny - 1))
+                adjacent = max(abs(tc[0] - robot_cell[0]), abs(tc[1] - robot_cell[1])) <= 1
+                if not (adjacent and dist <= self.detector.max_shoot_m):
+                    self._reject(d, "behind a mapped wall")
+                    continue
+                d.extra["map_wall_conflict"] = True
+                self._note(f"wall-conflict:{d.color}:{robot_cell}",
+                           f"visible {d.label} overrides a conflicting mapped wall at {tuple(robot_cell)}", 5.0)
             # slanted view: the width shrinks by cos(angle) and a wide rect looks square, a square
             # looks tall. Undo it with the angle to the wall the card hangs on (from the map).
             # The distance comes from the card height, which depends on the shape (6 / 7 / 9 cm),

@@ -5,8 +5,8 @@ Pure Python (no robot / OpenCV) so it can be tested offline:
     python3 src/route_planner.py data/raw/run1/round1_targets.json
 
 For every designated target we look for a *firing cell*: the target's own block
-or the block right next to it (straight, not diagonal) with no known wall in
-between - the robot never shoots across a block.
+or one of the eight adjacent blocks (diagonal included) with no known wall in
+between - the robot never shoots from more than one block away.
 Cells the target was actually seen from in round 1 are preferred, because the
 camera already proved it can see the target from there.  Targets are visited
 greedily (nearest first by BFS path length) using only edges that round 1
@@ -235,8 +235,8 @@ def open_test(open_edges):
 def firing_cells(graph, target, tile, max_shoot_m, exclude=(), margin=0.9, reach=None):
     """Candidate cells to shoot `target` from, best first: [(cell, dist, seen)].
 
-    Only cells within the shooting rule (see within_reach: this block or the next
-    one straight ahead, no wall between). `margin` keeps the cell inside the range
+    Only cells within the shooting rule (see within_reach: this block or one of
+    the eight adjacent blocks in 3x3 mode, no wall between). The margin keeps the cell inside the range
     limit: the saved target position has some error."""
     txy = (target["x_m"], target["y_m"])
     seen = {tuple(v["cell"]): v["dist_m"] for v in target.get("views", [])}
@@ -259,9 +259,24 @@ def firing_cells(graph, target, tile, max_shoot_m, exclude=(), margin=0.9, reach
                 edge_on.append((c, d, c in seen))
                 continue
             out.append((c, d, c in seen))
-    out = out or edge_on          # nothing better: a slanted spot is still worth a try
-    # face-on spots first (true shape + a clean hit), then proven views, then the nearest
-    out.sort(key=lambda t: (cell_view_deg(t[0], txy, tile, graph.nx, graph.ny, open_test(graph.open)) > FRONTAL_DEG, not t[2], t[1]))
+    # First use a clean view. After that fails, retain edge-on cells too because
+    # the target's own cell may be the only way to expose a blind corner.
+    out = (out + edge_on) if exclude else (out or edge_on)
+    target_cell = tuple(target.get("cell") or
+                        (min(max(int(txy[0] / tile), 0), graph.nx - 1),
+                         min(max(int(txy[1] / tile), 0), graph.ny - 1)))
+    if exclude:
+        # A neighbouring shot failed: enter the target's own block, look
+        # down/straight at its wall, and make the reliable second attempt there.
+        out.sort(key=lambda t: (t[0] != target_cell,
+                                cell_view_deg(t[0], txy, tile, graph.nx, graph.ny,
+                                              open_test(graph.open)) > FRONTAL_DEG,
+                                not t[2], t[1]))
+    else:
+        # First attempt: face-on/proven view, then nearest.
+        out.sort(key=lambda t: (cell_view_deg(t[0], txy, tile, graph.nx, graph.ny,
+                                              open_test(graph.open)) > FRONTAL_DEG,
+                                not t[2], t[1]))
     return out
 
 

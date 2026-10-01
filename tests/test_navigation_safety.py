@@ -6,6 +6,7 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from navigation_safety import braking_speed, corridor_obstacle, information_rate
+from route_planner import GridGraph, firing_cells, within_reach
 
 
 class NavigationSafetyTests(unittest.TestCase):
@@ -31,6 +32,22 @@ class NavigationSafetyTests(unittest.TestCase):
         near = information_rate(value=1.0, travel_s=2.6, scan_s=4.0)
         farther_but_useful = information_rate(value=4.0, travel_s=5.2, scan_s=4.0)
         self.assertGreater(farther_but_useful, near)
+
+    def test_diagonal_target_is_within_one_cell(self):
+        graph = GridGraph(3, 3, set())
+        self.assertTrue(within_reach(graph, (0, 0), (0.9, 0.9), 0.6))
+        self.assertFalse(within_reach(graph, (0, 0), (1.5, 1.5), 0.6))
+
+    def test_failed_neighbouring_view_falls_back_to_target_cell(self):
+        graph = GridGraph(3, 3, set())
+        target = {
+            "id": "red square", "x_m": 0.65, "y_m": 0.9,
+            "cell": [1, 1], "seen_from": [0, 1], "best_dist_m": 0.6,
+            "views": [{"cell": [0, 1], "dist_m": 0.6}],
+        }
+        cells = firing_cells(graph, target, 0.6, 1.2, exclude={(0, 1)})
+        self.assertTrue(cells)
+        self.assertEqual(cells[0][0], (1, 1))
 
 
 if __name__ == "__main__":

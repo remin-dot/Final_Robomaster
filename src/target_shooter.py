@@ -50,6 +50,8 @@ class TargetShooter:
         self.pitch_sign = float(cfg.get("gimbal_pitch_sign", 1))
         self.max_iters = int(cfg.get("aim_max_iterations", 6))
         self.lock_frames = int(cfg.get("lock_frames", 2))
+        self.close_lock_frames = max(2, min(self.lock_frames, int(cfg.get("close_lock_frames", 3))))
+        self.close_lock_m = float(cfg.get("close_lock_m", 0.55))
         self.fire_confirm_frames = max(self.lock_frames, int(cfg.get("fire_confirm_frames", 4)))
         self.fire_max_detection_age_s = float(cfg.get("fire_max_detection_age_s", 0.45))
         self.fire_require_full_visibility = bool(cfg.get("fire_require_full_visibility", True))
@@ -63,6 +65,10 @@ class TargetShooter:
         # confirm_fall can verify the real hit and learn vertical trim.
         self.assume_hit_after_locked_fire = bool(cfg.get("assume_hit_after_locked_fire", False))
         self.max_shots = int(cfg.get("max_shots_per_target", 3))
+        # The assignment permits two tiles (1.20 m). Keep a margin for
+        # pinhole/ToF error so a borderline estimate never becomes an illegal shot.
+        self.fire_range_margin = min(1.0, max(0.5, float(cfg.get("fire_range_margin", 0.90))))
+        self.fire_max_cells = max(0, int(cfg.get("fire_max_cells", 1)))
         self.shot_counts = {}              # hard per-target cap across every revisit/aim attempt
         self.fall_wait_s = float(cfg.get("fall_wait_s", 0.6))
         self.tol_max_deg = float(cfg.get("aim_tolerance_max_deg", 3.5))
@@ -104,6 +110,13 @@ class TargetShooter:
         self.dry_locked = set()                       # dry run: aim at each target only once
         panel.aim.configure(self.tol_deg, self.lock_frames)
         self._led(0, 255, 0, "on")
+
+    def _lock_needed(self, det):
+        """Use a bounded close-range lock count; all final fire safety gates still apply."""
+        distance = getattr(det, "distance_m", None)
+        if distance is not None and distance <= self.close_lock_m:
+            return self.close_lock_frames
+        return self.lock_frames
 
     # ------------------------------------------------------------------
     def _led(self, r, g, b, effect):
@@ -256,6 +269,11 @@ class TargetShooter:
         cands = [d for d in dets if d.is_card and d.kind == kind]
         if not cands and shape in fam:
             cands = [d for d in dets if d.is_card and d.color == color and d.shape in fam]
+        if not cands and self._all_shapes_selected(color):
+            # With all four shapes of this colour selected, a close/slanted outline changing
+            # circle <-> rectangle cannot make us abandon the physical card. The final frame
+            # is still required to be a full, fresh card and the ToF may correct its map kind.
+            cands = [d for d in dets if d.is_card and d.color == color]
         if not cands:
             return None
         ref = near or (0.0, 0.0)
@@ -264,6 +282,10 @@ class TargetShooter:
         if gate is not None and dist(best) > gate:
             return None
         return best
+
+    def _all_shapes_selected(self, color):
+        return all(f"{color} {shape}" in self.panel.selected
+                   for shape in ("circle", "rect_wide", "rect_tall", "square"))
 
     def _learn_latency(self, samples):
         """The camera delay from this aim: the card does not move, so with the right delay
@@ -430,13 +452,14 @@ class TargetShooter:
                             (abs(g[0] - tp_med) <= tol_p or (stall_since and time.time() - stall_since > 0.3))
                         inside = abs(ye) <= tol_y and (abs(pe) <= tol_p or
                                                        (stall_since is not None and abs(pe) <= half_h))
+                        lock_needed = self._lock_needed(d)
                         locked = locked + 1 if (settled and inside) else 0
                         cur_abs = (g[0] + self.pitch_sign * pe, g[1] + self.yaw_sign * ye)
                         lock_abs = (lock_abs + [cur_abs])[-locked:] if locked else []
-                        aim.set_phase("LOCKED" if locked >= self.lock_frames else ("COARSE" if i == 0 else "FINE"))
+                        aim.set_phase("LOCKED" if locked >= lock_needed else ("COARSE" if i == 0 else "FINE"))
                         aim.sample(ye, pe, locked)
                         i += 1
-                        if locked >= self.lock_frames:
+                        if locked >= lock_needed:
                             self.last_lock_dist = d.distance_m
                             # frames taken standing still: where the middle of the card is, exactly
                             self._lock_target = (sum(a[0] for a in lock_abs) / len(lock_abs),
@@ -587,6 +610,14 @@ class TargetShooter:
         mapped = self.panel.map.targets.get(tid)
         if not mapped or not mapped.get("confirmed") or mapped.get("shot"):
             return False, "mapped target is missing, unconfirmed, or already shot"
+        # Same cell or one of the eight neighbouring cells only. This is a
+        # Chebyshev distance, so diagonal shots are allowed.
+        m = self.panel.map
+        if mapped.get("sw") and hasattr(m, "robot") and hasattr(m, "tile"):
+            tx = min(max(int((mapped["sx"] / mapped["sw"]) / m.tile), 0), m.nx - 1)
+            ty = min(max(int((mapped["sy"] / mapped["sw"]) / m.tile), 0), m.ny - 1)
+            if max(abs(tx - m.robot[0]), abs(ty - m.robot[1])) > self.fire_max_cells:
+                return False, f"target is more than {self.fire_max_cells} cell away"
         if mapped.get("kind") != kind or kind not in self.panel.selected:
             return False, "mapped target kind is not selected"
         # A raw camera frame normally has no target_id.  The selected map id remains the
@@ -596,7 +627,9 @@ class TargetShooter:
         if det.kind != kind:
             color, shape = kind.split(" ", 1) if " " in kind else (kind, "")
             rects = ("square", "rect_wide", "rect_tall")
-            if det.color != color or shape not in rects or det.shape not in rects:
+            same_selected_colour = det.color == color and self._all_shapes_selected(color)
+            if not same_selected_colour and \
+                    (det.color != color or shape not in rects or det.shape not in rects):
                 return False, "fresh detection does not match mapped target"
         if self.fire_require_full_visibility:
             extra = getattr(det, "extra", {}) or {}
@@ -698,10 +731,11 @@ class TargetShooter:
                         inside = True
                         panel.log(f"{color}: gimbal pitch at its limit, {pitch_err:+.1f} deg is still on the card")
                     prev_pitch_err = pitch_err
+                    lock_needed = self._lock_needed(det)
                     locked_in_row = locked_in_row + 1 if inside else 0
-                    aim.set_phase("LOCKED" if locked_in_row >= self.lock_frames else ("COARSE" if i == 0 else "FINE"))
+                    aim.set_phase("LOCKED" if locked_in_row >= lock_needed else ("COARSE" if i == 0 else "FINE"))
                     aim.sample(yaw_err, pitch_err, locked_in_row)
-                    if locked_in_row >= self.lock_frames:
+                    if locked_in_row >= lock_needed:
                         break
                     if inside:
                         last_move = (0.0, 0.0)
@@ -717,7 +751,7 @@ class TargetShooter:
                         return False
                     time.sleep(0.08)
 
-                if locked_in_row < self.lock_frames:
+                if locked_in_row < self._lock_needed(det):
                     aim.set_phase("TIMEOUT")
                     panel.log(f"could not lock {color} (yaw err {yaw_err:+.1f}, pitch err {pitch_err:+.1f} deg)")
                     return False
@@ -757,10 +791,10 @@ class TargetShooter:
                 panel.log(f"{tid}: square or rectangle not sure (seen {t.get('best_view_deg', 90):.0f} deg "
                           f"off face-on, no ToF size) - not shooting yet")
                 return False
-            max_m = panel.detector.max_shoot_m
+            max_m = panel.detector.max_shoot_m * self.fire_range_margin
             if dist is None or dist > max_m:
                 aim.set_phase("OUT OF RANGE")
-                panel.log(f"{color} is {dist or 0:.2f} m away (> {max_m:.2f} m) - not firing")
+                panel.log(f"{color} is {dist or 0:.2f} m away (> safe {max_m:.2f} m) - not firing")
                 return False
 
             if not self.armed:

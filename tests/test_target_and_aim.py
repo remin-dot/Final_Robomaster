@@ -53,6 +53,25 @@ class TargetShapeTests(unittest.TestCase):
         self.assertTrue(target["confirmed"])
         self.assertEqual(target["observations"], 3)
 
+    def test_close_same_cell_squares_of_every_colour_are_shape_sure(self):
+        """No square colour may remain SHAPE? because a noisy map inferred a slanted wall."""
+        for color in ("blue", "red", "yellow", "green"):
+            with self.subTest(color=color):
+                mission_map = MissionMap()
+                target = mission_map.add_observation(
+                    color, "square", (0, 0), 0, 0.35, view_deg=70.0, evidence=3,
+                )
+                self.assertTrue(target["confirmed"])
+                self.assertTrue(mission_map.shape_sure(target["id"]))
+
+    def test_slanted_square_outside_own_cell_still_needs_better_view(self):
+        mission_map = MissionMap()
+        target = mission_map.add_observation(
+            "red", "square", (0, 0), 0, 0.75, view_deg=70.0, evidence=3,
+        )
+        self.assertTrue(target["confirmed"])
+        self.assertFalse(mission_map.shape_sure(target["id"]))
+
     def test_known_open_edge_never_serializes_as_wall(self):
         mission_map = MissionMap()
         edge = frozenset(((0, 0), (1, 0)))
@@ -70,8 +89,67 @@ class TargetShapeTests(unittest.TestCase):
         saved = mission_map.to_json()
         self.assertEqual(saved["walls"], [])
 
+    def test_round2_load_seeds_shooter_targets_and_resets_hits(self):
+        mission_map = MissionMap()
+        data = {
+            "grid_size": [6, 6], "tile_m": 0.6, "start_heading": 0,
+            "walls": [], "open_edges": [],
+            "targets": [{
+                "id": "blue rect_wide", "kind": "blue rect_wide",
+                "color": "blue", "shape": "rect_wide",
+                "x_m": 2.9, "y_m": 1.8, "cell": [4, 3],
+                "observations": 4, "shot": True, "confirmed": True,
+                "seen_from": [5, 3], "best_dist_m": 0.7,
+                "views": [{"cell": [5, 3], "dist_m": 0.7}],
+                "best_view_deg": 12.0, "shape_votes": {"rect_wide": 5.0},
+            }],
+        }
+        mission_map.load_round(data)
+        target = mission_map.target_list()[0]
+        self.assertEqual(target["id"], "blue rect_wide")
+        self.assertFalse(target["shot"])
+        self.assertTrue(mission_map.targets[target["id"]]["loaded_from_round1"])
+
+    def test_round2_saved_rectangle_kind_survives_oblique_live_view(self):
+        mission_map = MissionMap()
+        data = {
+            "grid_size": [6, 6], "tile_m": 0.6, "start_heading": 0,
+            "walls": [], "open_edges": [],
+            "targets": [{
+                "id": "blue rect_wide", "kind": "blue rect_wide",
+                "color": "blue", "shape": "rect_wide",
+                "x_m": 0.3, "y_m": 0.9, "cell": [0, 1],
+                "observations": 3, "confirmed": True, "seen_from": [0, 0],
+                "best_dist_m": 0.6, "views": [], "best_view_deg": 10.0,
+                "shape_votes": {"rect_wide": 3.0},
+            }],
+        }
+        mission_map.load_round(data)
+        mission_map.add_observation("blue", "square", (0, 0), 0, 0.6,
+                                    view_deg=55.0, evidence=5)
+        self.assertIn("blue rect_wide", mission_map.targets)
+        self.assertEqual(mission_map.targets["blue rect_wide"]["kind"], "blue rect_wide")
+
 
 class AimControllerTests(unittest.TestCase):
+    def test_all_shapes_selected_keeps_lock_when_close_shape_label_changes(self):
+        shooter = TargetShooter.__new__(TargetShooter)
+        shooter.panel = SimpleNamespace(selected={
+            "green circle", "green rect_wide", "green rect_tall", "green square",
+        })
+        det = SimpleNamespace(is_card=True, kind="green rect_tall", color="green",
+                              shape="rect_tall", bearing_deg=0.2, elevation_deg=-0.1)
+        picked = shooter._pick([det], "green circle", (0.0, 0.0), 12.0)
+        self.assertIs(picked, det)
+
+    def test_close_full_card_needs_three_locks_but_far_card_keeps_four(self):
+        shooter = TargetShooter.__new__(TargetShooter)
+        shooter.lock_frames = 4
+        shooter.close_lock_frames = 3
+        shooter.close_lock_m = 0.55
+        self.assertEqual(shooter._lock_needed(SimpleNamespace(distance_m=0.35)), 3)
+        self.assertEqual(shooter._lock_needed(SimpleNamespace(distance_m=0.80)), 4)
+
     def test_no_ammo_practice_counts_only_validated_fire_as_hit(self):
         shooter = TargetShooter.__new__(TargetShooter)
         shooter.assume_hit_after_locked_fire = True
