@@ -86,6 +86,28 @@ class CornerIRSafetyTests(unittest.TestCase):
         controller._make_corner_room(("left",))
         self.assertEqual(nudges, [(90.0, 0.04)])
 
+    def test_corner_name_cannot_shift_robot_toward_the_closer_side_wall(self):
+        controller = ChassisController.__new__(ChassisController)
+        # The real run reported a right-corner hit while the left Sharp was 12.7 cm
+        # and the right side had 22 cm.  The verified side clearance must win.
+        controller.ir = FakeIR(right=True, left_cm=12.7, right_cm=22.0)
+        controller.TURN_CLEAR_SIDE_CM = 15.0
+        controller._log = lambda _message: None
+        nudges = []
+        controller.nudge = lambda angle, distance: nudges.append((angle, distance))
+        self.assertTrue(controller._make_corner_room(("right",)))
+        self.assertEqual(nudges, [(90.0, 0.04)])
+
+    def test_both_corner_hits_can_escape_toward_one_verified_open_side(self):
+        controller = ChassisController.__new__(ChassisController)
+        controller.ir = FakeIR(left=True, right=True, left_cm=8.0, right_cm=30.0)
+        controller.TURN_CLEAR_SIDE_CM = 15.0
+        controller._log = lambda _message: None
+        nudges = []
+        controller.nudge = lambda angle, distance: nudges.append((angle, distance))
+        self.assertTrue(controller._make_corner_room(("left", "right")))
+        self.assertEqual(nudges, [(90.0, 0.04)])
+
     def test_corner_stop_is_retryable_not_a_wall(self):
         controller = ChassisController.__new__(ChassisController)
         controller.last_move_note = "front-left IR emergency stop at 0.17 m"

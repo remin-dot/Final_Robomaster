@@ -274,6 +274,20 @@ class TargetShooter:
             # circle <-> rectangle cannot make us abandon the physical card. The final frame
             # is still required to be a full, fresh card and the ToF may correct its map kind.
             cands = [d for d in dets if d.is_card and d.color == color]
+        if not cands and near is not None and gate is not None and \
+                self._mapped_close_target_is_authority(kind):
+            # At point-blank range a circle is commonly cropped/slanted enough for the
+            # contour classifier to call the very same blob a tall rectangle or square.
+            # Round 2 already owns a strongly confirmed map identity, so keep tracking a
+            # *full card of the same colour at the expected angle*.  The angular gate below
+            # prevents jumping to another card and the strict final-frame checks still run
+            # before the trigger is allowed.
+            # Include a colour candidate (``?`` in the overlay) as a tracking point.  A
+            # point-blank card can have its contour broken by the barrel reflection or a
+            # dark mark although its colour centroid is stable.  This is only enabled for
+            # the already-confirmed active map target; guesses remain non-shootable
+            # everywhere else.
+            cands = [d for d in dets if d.color == color and (d.is_card or d.guess)]
         if not cands:
             return None
         ref = near or (0.0, 0.0)
@@ -281,11 +295,52 @@ class TargetShooter:
         best = min(cands, key=dist)
         if gate is not None and dist(best) > gate:
             return None
+        if getattr(best, "distance_m", None) is None and \
+                self._mapped_close_target_is_authority(kind):
+            # Recover range from the mapped shape's real height.  This lets the normal
+            # barrel-offset and legal-range checks work while a full-frame colour candidate
+            # temporarily has no live shape classification.
+            try:
+                mapped_shape = kind.split(" ", 1)[1]
+                real_h = self.panel.detector.plate[mapped_shape][1]
+                best.distance_m = self._focal() * real_h / float(best.bbox[3])
+            except (AttributeError, KeyError, TypeError, ValueError, ZeroDivisionError):
+                pass
         return best
 
     def _all_shapes_selected(self, color):
         return all(f"{color} {shape}" in self.panel.selected
                    for shape in ("circle", "rect_wide", "rect_tall", "square"))
+
+    def _mapped_close_target_is_authority(self, kind):
+        """True only when Round 2 has enough map evidence to survive a close shape flip.
+
+        This deliberately does not make same-colour blobs interchangeable during normal
+        exploration.  It applies to the active, selected, confirmed target while the robot
+        is in/next to its cell and that target has already been observed at close range.
+        """
+        panel = getattr(self, "panel", None)
+        mission_map = getattr(panel, "map", None)
+        targets = getattr(mission_map, "targets", {}) or {}
+        tid = getattr(self, "_active_target_id", None) or kind
+        target = targets.get(tid)
+        if not target or target.get("kind") != kind or not target.get("confirmed") or target.get("shot"):
+            return False
+        if kind not in getattr(panel, "selected", set()):
+            return False
+        expected_shape = kind.split(" ", 1)[1] if " " in kind else ""
+        votes = target.get("shape_votes", {}) or {}
+        expected_votes = float(votes.get(expected_shape, 0.0))
+        other_votes = max((float(v) for s, v in votes.items() if s != expected_shape), default=0.0)
+        if int(target.get("observations", 0)) < 3 or expected_votes < 3.0 or expected_votes < 1.5 * other_votes:
+            return False
+        robot = getattr(mission_map, "robot", None)
+        cell = target.get("cell")
+        if robot is not None and cell is not None and \
+                max(abs(int(cell[0]) - int(robot[0])), abs(int(cell[1]) - int(robot[1]))) > 1:
+            return False
+        best_dist = target.get("best_dist_m")
+        return best_dist is not None and float(best_dist) <= getattr(self, "close_lock_m", 0.55)
 
     def _learn_latency(self, samples):
         """The camera delay from this aim: the card does not move, so with the right delay
@@ -605,7 +660,12 @@ class TargetShooter:
 
     def _fire_candidate_ok(self, det, tid, kind):
         """Strict last-frame gate. Mapping may accept candidates; firing may not."""
-        if det is None or not getattr(det, "is_card", False) or getattr(det, "guess", None):
+        color = kind.split(" ", 1)[0]
+        mapped_close_candidate = bool(det is not None and getattr(det, "guess", None) and
+                                      getattr(det, "color", None) == color and
+                                      self._mapped_close_target_is_authority(kind))
+        if det is None or (not getattr(det, "is_card", False) and not mapped_close_candidate) or \
+                (getattr(det, "guess", None) and not mapped_close_candidate):
             return False, "not a confirmed full card"
         mapped = self.panel.map.targets.get(tid)
         if not mapped or not mapped.get("confirmed") or mapped.get("shot"):
@@ -628,7 +688,8 @@ class TargetShooter:
             color, shape = kind.split(" ", 1) if " " in kind else (kind, "")
             rects = ("square", "rect_wide", "rect_tall")
             same_selected_colour = det.color == color and self._all_shapes_selected(color)
-            if not same_selected_colour and \
+            same_mapped_close_target = det.color == color and self._mapped_close_target_is_authority(kind)
+            if not same_selected_colour and not same_mapped_close_target and \
                     (det.color != color or shape not in rects or det.shape not in rects):
                 return False, "fresh detection does not match mapped target"
         if self.fire_require_full_visibility:
@@ -772,7 +833,13 @@ class TargetShooter:
                 dist = tof / 1000.0
                 # the ToF is on the card now: its real size tells square from rectangle
                 # (height does not change at a slant: 6 cm wide rect, 7 cm square, 9 cm tall rect)
-                measured = self._measure_shape(det, dist)
+                # Only resolve ambiguity *within* the rectangle family.  A strongly mapped
+                # circle can briefly be labelled tall/square at point-blank range; treating
+                # that one noisy outline as a ToF reclassification used to overwrite the
+                # Round-1 identity and reject the selected green circle just before firing.
+                mapped_shape = kind.split(" ", 1)[1] if " " in kind else ""
+                measured = self._measure_shape(det, dist) if mapped_shape in \
+                    ("square", "rect_wide", "rect_tall") else None
                 if measured:
                     old_tid = tid
                     tid = panel.map.set_measured_shape(tid, measured) or tid

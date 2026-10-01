@@ -22,6 +22,26 @@ def contour(draw):
 
 
 class TargetShapeTests(unittest.TestCase):
+    def test_final2_profile_uses_repository_detector_settings(self):
+        det = TargetDetector({"vision": {
+            "detector_profile": "final2",
+            # These conflicting values prove that the named source profile wins.
+            "color_model": "veto",
+            "processing_width": 512,
+            "refine_roi": True,
+            "shape_method": "area",
+            "roi_classifier": True,
+            "morph_kernel_px": 5,
+        }})
+        self.assertTrue(det.final2_profile)
+        self.assertEqual(det.color_model, "hsv")
+        self.assertEqual(det.processing_width, 640)
+        self.assertFalse(det.refine_roi)
+        self.assertEqual(det.shape_method, "contour")
+        self.assertIsNone(det.roi_clf)
+        self.assertEqual(det.kernel.shape, (3, 3))
+        self.assertEqual(det.max_elevation_deg, 2.0)
+
     def test_circle_and_oblique_circle_never_become_square(self):
         circle = contour(lambda im: cv2.circle(im, (50, 50), 15, 255, -1))
         ellipse = contour(lambda im: cv2.ellipse(im, (50, 50), (15, 11), 0, 0, 360, 255, -1))
@@ -141,6 +161,119 @@ class AimControllerTests(unittest.TestCase):
                               shape="rect_tall", bearing_deg=0.2, elevation_deg=-0.1)
         picked = shooter._pick([det], "green circle", (0.0, 0.0), 12.0)
         self.assertIs(picked, det)
+
+    def test_confirmed_close_green_circle_tracks_through_tall_rect_shape_flip(self):
+        shooter = TargetShooter.__new__(TargetShooter)
+        shooter.close_lock_m = 0.55
+        shooter._active_target_id = "green circle"
+        target = {
+            "kind": "green circle", "confirmed": True, "shot": False,
+            "cell": [2, 1], "observations": 12, "best_dist_m": 0.17,
+            "shape_votes": {"circle": 28.574},
+        }
+        shooter.panel = SimpleNamespace(
+            selected={"green circle"},
+            map=SimpleNamespace(targets={"green circle": target}, robot=(2, 1)),
+            detector=SimpleNamespace(last_frame_size=(640, 360), plate={"circle": (0.07, 0.07)},
+                                     focal_px=lambda width: 288.0),
+        )
+        det = SimpleNamespace(is_card=True, kind="green rect_tall", color="green",
+                              shape="rect_tall", bearing_deg=0.4, elevation_deg=0.2,
+                              distance_m=0.18, bbox=(280, 120, 60, 100))
+        picked = shooter._pick([det], "green circle", (0.0, 0.0), 5.0)
+        self.assertIs(picked, det)
+
+    def test_confirmed_close_green_candidate_becomes_lock_point(self):
+        shooter = TargetShooter.__new__(TargetShooter)
+        shooter.close_lock_m = 0.55
+        shooter._active_target_id = "green circle"
+        target = {
+            "kind": "green circle", "confirmed": True, "shot": False,
+            "cell": [2, 1], "observations": 17, "best_dist_m": 0.18,
+            "shape_votes": {"circle": 54.905},
+        }
+        shooter.panel = SimpleNamespace(
+            selected={"green circle"},
+            map=SimpleNamespace(targets={"green circle": target}, robot=(2, 1)),
+            detector=SimpleNamespace(last_frame_size=(640, 360), plate={"circle": (0.07, 0.07)},
+                                     focal_px=lambda width: 288.0),
+        )
+        det = SimpleNamespace(is_card=False, guess="square", kind="green unknown", color="green",
+                              shape="unknown", bearing_deg=0.4, elevation_deg=0.2,
+                              distance_m=None, bbox=(260, 80, 120, 110), extra={})
+        picked = shooter._pick([det], "green circle", (0.0, 0.0), 5.0)
+        self.assertIs(picked, det)
+        self.assertAlmostEqual(det.distance_m, 288.0 * 0.07 / 110.0)
+
+    def test_unconfirmed_or_far_green_does_not_override_selected_shape(self):
+        shooter = TargetShooter.__new__(TargetShooter)
+        shooter.close_lock_m = 0.55
+        shooter._active_target_id = "green circle"
+        target = {
+            "kind": "green circle", "confirmed": True, "shot": False,
+            "cell": [2, 1], "observations": 2, "best_dist_m": 0.17,
+            "shape_votes": {"circle": 2.0},
+        }
+        shooter.panel = SimpleNamespace(
+            selected={"green circle"},
+            map=SimpleNamespace(targets={"green circle": target}, robot=(2, 1)),
+        )
+        det = SimpleNamespace(is_card=True, kind="green rect_tall", color="green",
+                              shape="rect_tall", bearing_deg=0.4, elevation_deg=0.2)
+        self.assertIsNone(shooter._pick([det], "green circle", (0.0, 0.0), 5.0))
+
+    def test_confirmed_close_green_shape_flip_passes_strict_fire_gate(self):
+        shooter = TargetShooter.__new__(TargetShooter)
+        shooter.close_lock_m = 0.55
+        shooter._active_target_id = "green circle"
+        shooter.fire_require_full_visibility = True
+        shooter.fire_require_gimbal_still = False
+        shooter.fire_max_detection_age_s = 1.0
+        shooter.gimbal_hist = []
+        target = {
+            "kind": "green circle", "confirmed": True, "shot": False,
+            "cell": [2, 1], "observations": 12, "best_dist_m": 0.17,
+            "shape_votes": {"circle": 28.574},
+        }
+        shooter.panel = SimpleNamespace(
+            selected={"green circle"},
+            map=SimpleNamespace(targets={"green circle": target}, robot=(2, 1)),
+            detector=SimpleNamespace(last_frame_size=(640, 360)),
+            worker=SimpleNamespace(det_ts=0.0),
+        )
+        det = SimpleNamespace(is_card=True, guess=None, kind="green rect_tall", color="green",
+                              shape="rect_tall", bbox=(280, 120, 60, 100), extra={})
+        ok, why = shooter._fire_candidate_ok(det, "green circle", "green circle")
+        self.assertTrue(ok, why)
+
+    def test_confirmed_close_full_frame_green_candidate_passes_fire_gate(self):
+        shooter = TargetShooter.__new__(TargetShooter)
+        shooter.close_lock_m = 0.55
+        shooter._active_target_id = "green circle"
+        shooter.fire_require_full_visibility = True
+        shooter.fire_require_gimbal_still = False
+        shooter.fire_max_detection_age_s = 1.0
+        shooter.gimbal_hist = []
+        target = {
+            "kind": "green circle", "confirmed": True, "shot": False,
+            "cell": [2, 1], "observations": 17, "best_dist_m": 0.18,
+            "shape_votes": {"circle": 54.905},
+        }
+        shooter.panel = SimpleNamespace(
+            selected={"green circle"},
+            map=SimpleNamespace(targets={"green circle": target}, robot=(2, 1)),
+            detector=SimpleNamespace(last_frame_size=(640, 360)),
+            worker=SimpleNamespace(det_ts=0.0),
+        )
+        det = SimpleNamespace(is_card=False, guess="square", kind="green unknown", color="green",
+                              shape="unknown", bbox=(250, 80, 140, 130), extra={})
+        ok, why = shooter._fire_candidate_ok(det, "green circle", "green circle")
+        self.assertTrue(ok, why)
+
+        det.extra = {"clipped": True}
+        ok, why = shooter._fire_candidate_ok(det, "green circle", "green circle")
+        self.assertFalse(ok)
+        self.assertIn("edge", why)
 
     def test_close_full_card_needs_three_locks_but_far_card_keeps_four(self):
         shooter = TargetShooter.__new__(TargetShooter)

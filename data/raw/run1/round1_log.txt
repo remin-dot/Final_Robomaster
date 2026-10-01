@@ -1,26 +1,38 @@
-09:48:05 Round 1 started (10:00 limit)
-09:48:09 off-centre before scan (Sharp L 15 / R 30 cm) - centring before target detection
-09:48:13 SCAN_DONE cell=(4, 0) elapsed=3.12s mode=sweep
-09:48:17 off-centre before scan (Sharp L 14 / R 30 cm) - centring before target detection
-09:48:20 SCAN_DONE cell=(4, 1) elapsed=2.45s mode=sweep
-09:48:20 recentre: slide 5 cm right
-09:48:22 camera says wall 0.27 m but ToF 935 mm - trusting the ToF
-09:48:25 off-centre before scan (Sharp L 14 / R 30 cm) - centring before target detection
-09:48:27 SCAN_DONE cell=(4, 2) elapsed=2.19s mode=sweep
-09:48:27 recentre: slide 6 cm forward
-09:48:28 recentre: slide 4 cm right
-09:48:35 off-centre before scan (Sharp L 15 / R 30 cm) - centring before target detection
-09:48:38 SCAN_DONE cell=(5, 2) elapsed=2.34s mode=sweep
-09:48:38 next: (5, 1) (3 moves) - most still unseen per second
-09:48:44 EMERGENCY STOP: left wall 7 cm, closing 36 cm/s
-09:48:45 drifted +10 cm sideways off the line - stop, back to the block
-09:48:50 move (5, 2) -> (4, 2) failed (drifted +10 cm off the line), retry 1
-09:48:54 arrived 78% in, wall 210 mm ahead = far wall of this block
-09:48:54 next: (5, 1) (2 moves) - most still unseen per second
-09:48:54 too close to turn (Sharp L 17 / R 19 cm, front near) - making room first
-09:48:55 EMERGENCY STOP while turning: side wall 5 cm - making room
-09:48:55 too close to turn (Sharp L 17 / R 6 cm, front near) - making room first
-09:49:03 EMERGENCY STOP: left wall 7 cm, closing 0 cm/s
-09:49:04 behind 7:30 coverage target (15 s per block, 32 blocks left, predicted finish 536 s): candidate-only checks from now on
-09:49:14 SCAN_DONE cell=(5, 1) elapsed=2.37s mode=sweep
-09:49:14 every reachable cell visited; no safe route to [(0, 0), (0, 1), (0, 2), (0, 3), (0, 4), (0, 5), (1, 0), (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (2, 0), (2, 1), (2, 2), (2, 3), (2, 4), (2, 5), (3, 0), (3, 1), (3, 2), (3, 3), (3, 4), (3, 5), (4, 3), (4, 4), (4, 5), (5, 0), (5, 3), (5, 4), (5, 5)]
+11:06:20 Round 1 started (10:00 limit)
+11:06:21 off-centre before scan (Sharp L 12 / R 26 cm) - centring before target detection
+11:06:26 SCAN_DONE cell=(1, 0) elapsed=2.86s mode=sweep
+11:06:26 LOOK cell=(1, 0) chassis=0deg gimbal_rel=+148deg gimbal_abs=148deg pitch=-7deg reason=MAP_SCAN
+11:06:26 blue card glimpsed while the gimbal was turning (4 blurred frame(s), outside the still looks) - looked again: nothing new there
+11:06:29 WHEELS NOT ANSWERING while driving: drive commands for 1.2 s, wheels 0 rpm, odometry + yaw frozen - trying to wake the chassis
+11:06:30 chassis answers again - carrying on
+11:06:31 front-right IR caution: slowing and steering away
+11:06:31 EMERGENCY STOP: right wall 12 cm, closing 33 cm/s
+11:06:34 off-centre before scan (Sharp L 14 / R 30 cm) - centring before target detection
+11:06:36 SCAN_DONE cell=(1, 1) elapsed=2.11s mode=sweep
+11:06:36 LOOK cell=(1, 1) chassis=0deg gimbal_rel=+87deg gimbal_abs=87deg pitch=-15deg reason=MAP_SCAN
+11:06:37 FOUND green circle at cell (2, 1)
+11:06:38 FIRE 1 -> green circle at 0.81 m
+11:06:38 HIT green circle: centred locked fire accepted (no-ammo practice mode)
+11:06:39 green card glimpsed while the gimbal was turning (3 blurred frame(s), outside the still looks) - looked again: confirmed green circle
+11:06:43 off-centre before scan (Sharp L 15 / R 30 cm) - centring before target detection
+11:06:45 SCAN_DONE cell=(1, 2) elapsed=2.14s mode=sweep
+11:06:45 recentre: slide 6 cm forward
+11:06:46 recentre: slide 4 cm right
+11:06:54 off-centre before scan (Sharp L 14 / R 30 cm) - centring before target detection
+11:06:56 SCAN_DONE cell=(2, 2) elapsed=2.15s mode=sweep
+11:06:56 next: (2, 1) (3 moves) - most still unseen per second
+11:06:56 too close to turn (Sharp L 14 / R 30 cm, front clear) - making room first
+11:06:59 EMERGENCY STOP while turning: side wall 8 cm - making room
+11:06:59 too close to turn (Sharp L 8 / R 30 cm, front clear) - making room first
+11:07:05 centre check ended with lateral error -4.3 cm; continuing slowly with collision guards
+11:07:05 next: (2, 1) (2 moves) - most still unseen per second
+11:07:05 too close to turn (Sharp L 17 / R 30 cm, front near) - making room first
+11:07:11 EMERGENCY STOP: left wall 7 cm, closing 0 cm/s
+11:07:13 behind 7:30 coverage target (13 s per block, 32 blocks left, predicted finish 479 s): candidate-only checks from now on
+11:07:13 yellow colour seen while driving in, 0.35 m from the centre - the close look will aim at it
+11:07:13 yellow colour seen while driving in, 0.17 m from the centre - the close look will aim at it
+11:07:13 close look at (1, 1): maybe yellow unknown, maybe yellow unknown
+11:07:13 LOOK cell=(1, 1) chassis=180deg gimbal_rel=+90deg gimbal_abs=270deg pitch=-10deg reason=TARGET_VERIFY
+11:07:22 off-centre before scan (Sharp L 15 / R 30 cm) - centring before target detection
+11:07:24 SCAN_DONE cell=(2, 1) elapsed=2.16s mode=sweep
+11:07:24 every reachable cell visited; no safe route to [(0, 0), (0, 1), (0, 2), (0, 3), (0, 4), (0, 5), (1, 3), (1, 4), (1, 5), (2, 0), (2, 3), (2, 4), (2, 5), (3, 0), (3, 1), (3, 2), (3, 3), (3, 4), (3, 5), (4, 0), (4, 1), (4, 2), (4, 3), (4, 4), (4, 5), (5, 0), (5, 1), (5, 2), (5, 3), (5, 4), (5, 5)]

@@ -113,7 +113,7 @@ grid_map:
   max_x: 5          # 6x6 tiles -> indices 0..5
   max_y: 5
   start:             # 🟢 เพิ่มค่าเริ่มต้นตรงนี้ (เช่น วางหุ่นที่ช่องไหนก็ใส่ x, y นั้น)
-    x: 4
+    x: 1
     y: 0
     heading: N         # way the robot faces at the start (N = up the map)
   # goal:
@@ -161,19 +161,21 @@ vision:
   resolution: "540p"        # camera stream; 7 cm cards at 1.2 m are too small at 360p
   panel_fps: 30
   processing_fps: 60        # requested trial: detector ceiling (actual rate still depends on ms/frame)
-  processing_width: 512     # ~18-20 det fps here; 480 was faster but missed cards in recorded images
+  detector_profile: final2  # HSV + contour detector from remin-dot/Final_2_robomaster/vision.py
+  processing_width: 640     # final2 profile fixes this to the source model's training/tuning resolution
   camera_stale_s: 1.0       # a frozen old image must never be used as if it were a live target view
   camera_recover_wait_s: 3.0 # wait briefly for Wi-Fi video, then stop rather than explore blind
   hfov_deg: 96              # camera field of view - Actions > "Calibrate: card at 1 m" sets it
   camera_latency_s: 0.06    # measured on this robot; wrong delay makes closed-loop aim oscillate
-  color_model: veto         # background veto remains for red/yellow/blue; green bypasses it to survive lighting changes
+  color_model: hsv          # final2 profile: calibrated HSV ranges, no learned background veto
   record_frames: false      # competition mode: JPEG recording steals detector time; map/logs still save
   record_every_s: 1.0
   # 2026-09-30: back to the old detector - on 1150 recorded frames it gave 152 right / 6 wrong kinds
   # vs the new stages' 150 right / 28 wrong (the box classifier called far tall rects squares)
   refine_roi: false         # stage 2: re-find each blob's edge in a box around it (colour distance + Otsu)
   refine_grabcut: auto      # ... GrabCut when Otsu disagrees with the first mask (auto) | on | off
-  shape_method: contour       # area = shape from box fill / ellipse-vs-rectangle overlap / aspect | contour = the old corner rules
+  shape_method: contour     # final2 profile: circularity/fill/aspect/corner contour rules
+  morph_kernel_px: 3        # final2 profile uses a 3x3 open + close kernel
   roi_classifier: false     # stage 3: use config/shape_knn.npz when it exists (roi_dataset -> roi_label -> roi_train)
   auto_train_after_round: false # end of a round: label this round's frames (by the final map) and retrain the box classifier (Vision tab)
   exposure_s: 0.02          # camera exposure: smear length of frames taken while the gimbal turns
@@ -250,7 +252,7 @@ vision:
   # card kinds to shoot on the day ("colour shape"; shooting a wrong one = -1).
   # colours: blue red yellow green   shapes: circle rect_wide rect_tall square
   # e.g. ["blue circle", "red circle"]. Switch them on the panel: Select tab -> Save.
-  shoot_targets: ["green rect_wide"]
+  shoot_targets: ["green circle"]
   round_time_limit_s: {1: 600, 2: 300}
 
 shooting:
@@ -262,12 +264,12 @@ shooting:
   max_shots_per_target: 3   # ... at most this many times, then move on
   fire_range_margin: 0.90   # legal max 2 tiles=1.20 m; fire <=1.08 m to absorb range error
   fire_max_cells: 1         # own/8 adjacent cells only; diagonal is allowed
-  route_target_spots: 2     # round 2: saved bearing + at most one alternate cell
+  route_target_spots: 3     # Round 2: at most two adjacent views, then the target's own cell
   card_aim_height_m: 0.14   # expected centre of a 15-20 cm target below the 25 cm camera
   min_shoot_m: 0.15         # a confirmed visible card may fire immediately from 15 cm
   back_off_max_m: 0.0       # never reverse before firing: it lost targets and risked rear collisions
   search_offsets_deg: [0]   # one map-guided look per target/cell, no -12/+12 head oscillation
-  close_search_offsets_deg: [0, -8, 8] # only in target cell; recover a blind-corner card without a full sweep
+  close_search_offsets_deg: [0, -15, 15, -30, 30] # target cell only; bounded fan for close bearing error
   aim_attempts_per_cell: 2  # bounded real shooter engagements before trying another firing cell
   reserve_margin_s: 45      # keep time for obstacle replans and shot retries before 10 minutes
   fall_wait_s: 0.6          # time for a hit card to fall before looking

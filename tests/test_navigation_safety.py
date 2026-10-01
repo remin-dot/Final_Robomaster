@@ -49,6 +49,17 @@ class NavigationSafetyTests(unittest.TestCase):
         self.assertTrue(cells)
         self.assertEqual(cells[0][0], (1, 1))
 
+    def test_very_close_target_still_allows_its_own_cell(self):
+        """Round 2 must not reject legal same-cell shooting as 'too close'."""
+        graph = GridGraph(6, 6, set())
+        target = {
+            "id": "green circle", "x_m": 3.383, "y_m": 0.978,
+            "cell": [5, 1], "seen_from": [4, 1],
+        }
+        cells = firing_cells(graph, target, 0.6, 1.2, exclude={(4, 0), (4, 1)})
+        self.assertTrue(cells)
+        self.assertEqual(cells[0][0], (5, 1))
+
 
 if __name__ == "__main__":
     unittest.main()

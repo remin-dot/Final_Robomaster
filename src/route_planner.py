@@ -242,6 +242,9 @@ def firing_cells(graph, target, tile, max_shoot_m, exclude=(), margin=0.9, reach
     seen = {tuple(v["cell"]): v["dist_m"] for v in target.get("views", [])}
     if target.get("seen_from"):
         seen.setdefault(tuple(target["seen_from"]), target.get("best_dist_m", 0))
+    target_cell = tuple(target.get("cell") or
+                        (min(max(int(txy[0] / tile), 0), graph.nx - 1),
+                         min(max(int(txy[1] / tile), 0), graph.ny - 1)))
     out, edge_on = [], []
     for x in range(graph.nx):
         for y in range(graph.ny):
@@ -249,8 +252,11 @@ def firing_cells(graph, target, tile, max_shoot_m, exclude=(), margin=0.9, reach
             if c in exclude:
                 continue
             d = math.hypot((x + 0.5) * tile - txy[0], (y + 0.5) * tile - txy[1])
-            # too close: the plate may be above/below the camera view
-            if d > max_shoot_m * margin or d < 0.25 * tile:
+            # A neighbouring firing cell that projects implausibly close is bad map
+            # geometry. The target's OWN cell is different: same-cell shooting is legal,
+            # and the close-look pitch/search exists specifically for a card on that cell's
+            # wall. Excluding it made Round 2 give up without entering the target cell.
+            if d > max_shoot_m * margin or (d < 0.25 * tile and c != target_cell):
                 continue
             if not within_reach(graph, c, txy, tile, reach):
                 continue
@@ -262,9 +268,6 @@ def firing_cells(graph, target, tile, max_shoot_m, exclude=(), margin=0.9, reach
     # First use a clean view. After that fails, retain edge-on cells too because
     # the target's own cell may be the only way to expose a blind corner.
     out = (out + edge_on) if exclude else (out or edge_on)
-    target_cell = tuple(target.get("cell") or
-                        (min(max(int(txy[0] / tile), 0), graph.nx - 1),
-                         min(max(int(txy[1] / tile), 0), graph.ny - 1)))
     if exclude:
         # A neighbouring shot failed: enter the target's own block, look
         # down/straight at its wall, and make the reliable second attempt there.

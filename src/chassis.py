@@ -539,10 +539,23 @@ class ChassisController:
         """Move a few centimetres away from a corner that stopped the chassis."""
         hits = tuple(hits)
         left_cm, right_cm = self.ir.latest()
-        if hits == ("left",) and self.ir.usable("right") and right_cm >= self.TURN_CLEAR_SIDE_CM:
+        # Trust the two side distances first when they clearly identify the open side.  On
+        # the real robot the right front switch can stay active beside a foam edge even while
+        # the left Sharp is the sensor that is actually close.  Following the switch name in
+        # that case shifted left *into* the 8 cm wall and Round 2 could never leave its start
+        # cell.  A lateral escape is allowed only toward a live Sharp reporting verified room.
+        right_open = self.ir.usable("right") and right_cm >= self.TURN_CLEAR_SIDE_CM
+        left_open = self.ir.usable("left") and left_cm >= self.TURN_CLEAR_SIDE_CM
+        if right_open and (not left_open or right_cm > left_cm + 2.0):
+            self._log("corner stop: left side is closer - shift right into verified clearance")
+            self.nudge(90.0, 0.04)
+        elif left_open and (not right_open or left_cm > right_cm + 2.0):
+            self._log("corner stop: right side is closer - shift left into verified clearance")
+            self.nudge(-90.0, 0.04)
+        elif hits == ("left",) and right_open:
             self._log("front-left IR: shift right before retry")
             self.nudge(90.0, 0.04)
-        elif hits == ("right",) and self.ir.usable("left") and left_cm >= self.TURN_CLEAR_SIDE_CM:
+        elif hits == ("right",) and left_open:
             self._log("front-right IR: shift left before retry")
             self.nudge(-90.0, 0.04)
         else:
@@ -2633,6 +2646,8 @@ class ChassisController:
         remaining = list(remaining)
         deg = {0: 0, 1: 90, 2: 180, 3: 270}
         exclude = {t["id"]: set() for t in remaining}   # firing cells that did not work, per target
+        temporary_walls = set()       # safety stops are retryable; never corrupt the saved map
+        temporary_reopens = 0
         self.route_info = None
 
         def show():
@@ -2671,6 +2686,14 @@ class ChassisController:
             while remaining and time_left():
                 res = plan()
                 if not res["stops"]:
+                    if temporary_walls and temporary_reopens < 2:
+                        panel.log(f"reopening {len(temporary_walls)} temporarily unsafe Round-2 edge(s) "
+                                  "after centring recovery")
+                        graph.walls.difference_update(temporary_walls)
+                        temporary_walls.clear()
+                        temporary_reopens += 1
+                        self._make_corner_room(self._front_corner_hits())
+                        continue
                     panel.log("no reachable firing spot for: " + ", ".join(t["id"] for t in remaining))
                     break
                 if first or res["algorithm"] != (self.route_info or {}).get("algorithm"):
@@ -2716,7 +2739,10 @@ class ChassisController:
                         edge = frozenset((pos, nxt))
                         graph.walls.add(edge)
                         graph.open.discard(edge)
-                        if not retryable_failure:
+                        if retryable_failure:
+                            temporary_walls.add(edge)
+                            panel.log(f"edge {pos}->{nxt} is temporarily unsafe, not a mapped wall")
+                        else:
                             panel.map.walls.add(edge)
                         blocked = True
                         break
@@ -2745,9 +2771,14 @@ class ChassisController:
                         return tid is not None and (self.shooter is None or tid in self.shooter.dry_locked)
 
                     done = hit()
-                    # Round 1 already supplied the bearing. One direct look is enough;
-                    # a miss may try one alternate firing cell, not five head angles.
-                    for off in (0,):
+                    # Round 1 already supplied the bearing. From an adjacent cell one direct
+                    # look is enough. In the target's own cell the projected point can be only
+                    # a few centimetres from the centre, where a small position error becomes
+                    # a large bearing error; use one bounded close fan instead of giving up on
+                    # a same-cell / blind-corner target.
+                    target_cell = tuple(t.get("cell", ()))
+                    offsets = self.CLOSE_SHOOT_SEARCH_OFFSETS if tuple(pos) == target_cell else (0,)
+                    for off in offsets:
                         if done or not time_left():
                             break
                         g = wrap180(rel + off)
@@ -2768,9 +2799,19 @@ class ChassisController:
                     else:
                         exclude[t["id"]].add(tuple(pos))
                         panel.log(f"{t['id']} not hit from {pos}, trying another spot")
-                        if len(exclude[t["id"]]) >= self.route_target_spots:
+                        target_cell = tuple(t.get("cell", ()))
+                        if tuple(pos) == target_cell:
                             panel.log(f"giving up on {t['id']}")
                             remaining.remove(t)
+                        elif len(exclude[t["id"]]) >= max(1, self.route_target_spots - 1):
+                            # The final attempt must be from inside the target cell. Exclude
+                            # every other candidate so route optimisation cannot choose a
+                            # third cheap neighbouring view and then abandon the card.
+                            exclude[t["id"]].update(
+                                (cx, cy) for cx in range(nx) for cy in range(ny)
+                                if (cx, cy) != target_cell
+                            )
+                            panel.log(f"{t['id']}: adjacent views failed - final retry in target cell {target_cell}")
                 self.reset_gimbal()
         except KeyboardInterrupt:
             print("\n--> ยกเลิกโดยผู้ใช้")

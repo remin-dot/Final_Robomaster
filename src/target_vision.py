@@ -346,6 +346,13 @@ class TargetDetector:
         config = config or {}
         vis = config.get("vision", {}) or {}
         move = config.get("movement", {}) or {}
+        # `final2` is the detector profile from
+        # https://github.com/remin-dot/Final_2_robomaster (vision.py).  That repository
+        # contains no neural-network weight file; its model is the calibrated HSV mask plus
+        # the contour classifier below.  Keep this explicit so later optional LUT/ROI models
+        # cannot silently change the requested detector.
+        self.detector_profile = str(vis.get("detector_profile", "enhanced")).strip().lower()
+        self.final2_profile = self.detector_profile in ("final2", "final_2")
 
         self.hsv = _load_hsv()
         self.catalogue = dict(DEFAULT_CATALOGUE)
@@ -370,7 +377,7 @@ class TargetDetector:
         # LUT (color_samples.json) calls background (beige, wood, walls) - safe with few samples;
         # "both" = a pixel must also be that colour by the samples; "lab" = the LUT alone.
         # Background samples always veto the blur-tolerant search.
-        self.color_model = str(vis.get("color_model", "veto")).lower()
+        self.color_model = "hsv" if self.final2_profile else str(vis.get("color_model", "veto")).lower()
         self.lut, self.lut_names = (None, [])
         if self.color_model != "hsv":
             self.lut, self.lut_names = load_color_lut()
@@ -380,11 +387,11 @@ class TargetDetector:
         # stage 2 - per blob: re-find its edge inside a box around it (colour distance card vs
         # wall + Otsu; GrabCut when that is poor), then the shape from AREA features (fill of
         # the box, fitted ellipse vs rectangle overlap) - blurred edges do not break those
-        self.refine_roi = bool(vis.get("refine_roi", True))
+        self.refine_roi = False if self.final2_profile else bool(vis.get("refine_roi", True))
         self.refine_grabcut = str(vis.get("refine_grabcut", "auto")).lower()   # auto | on | off
-        self.shape_method = str(vis.get("shape_method", "area")).lower()       # area | contour
+        self.shape_method = "contour" if self.final2_profile else str(vis.get("shape_method", "area")).lower()
         self.roi_clf = None             # optional HOG+SVM box classifier (config/shape_svm.xml)
-        if vis.get("roi_classifier", True):
+        if not self.final2_profile and vis.get("roi_classifier", True):
             self.roi_clf = RoiClassifier.load()
         self.debug = None               # vision_debug.py: per-blob stage images
         self.guess_min_h_frac = float(vis.get("guess_min_height_frac", 0.08))  # visible part >= 8% of the picture
@@ -396,7 +403,8 @@ class TargetDetector:
         self.max_ring_fill = float(vis.get("max_ring_fill", 0.25))
 
         self.hfov_deg = float(vis.get("hfov_deg", 96.0))
-        self.processing_width = max(320, int(vis.get("processing_width", PROC_WIDTH)))
+        self.processing_width = 640 if self.final2_profile else max(
+            320, int(vis.get("processing_width", PROC_WIDTH)))
         self.processing_fps = max(0.0, float(vis.get("processing_fps", 0.0)))
         self.bottom_ignore = float(vis.get("bottom_ignore_ratio", 0.15))
         self.top_ignore = float(vis.get("top_ignore_ratio", 0.0))
@@ -415,7 +423,7 @@ class TargetDetector:
         self.wall_edge_max_below_horizon = float(
             vis.get("wall_edge_max_below_horizon_frac", 0.08))
         # cards hang lower than the camera, so their centre is below the horizon; the room is above it
-        self.max_elevation_deg = vis.get("max_elevation_deg", 1.5)  # None / off = no horizon rule
+        self.max_elevation_deg = 2.0 if self.final2_profile else vis.get("max_elevation_deg", 1.5)
         self.gimbal_pitch_deg = 0.0     # live gimbal pitch (set by the chassis) - moves the horizon
         # a card hangs at card height: tape on the floor (and things up in the room) are not at it
         self.camera_height_m = float(vis.get("camera_height_m", 0.25))
@@ -427,7 +435,10 @@ class TargetDetector:
         self.last_pitch_deg = 0.0       # gimbal pitch when that frame was processed
         self.tile_m = float(move.get("distance", 0.6))
         self.max_shoot_tiles = float(vis.get("max_shoot_tiles", 2))
-        self.kernel = np.ones((5, 5), np.uint8)
+        kernel_px = 3 if self.final2_profile else max(1, int(vis.get("morph_kernel_px", 5)))
+        if kernel_px % 2 == 0:
+            kernel_px += 1
+        self.kernel = np.ones((kernel_px, kernel_px), np.uint8)
 
     # ------------------------------------------------------------------
     @property
